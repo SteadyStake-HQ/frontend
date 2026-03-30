@@ -34,6 +34,11 @@ const apolloInboundScript = `(function initApolloInbound() {
   };
   script.onload = function() {
     try {
+      if (!window.ApolloInbound || !window.ApolloInbound.formEnrichment) {
+        console.error('[Apollo] Form enrichment object unavailable after script load');
+        cleanup();
+        return;
+      }
       window.ApolloInbound.formEnrichment.init({
         appId: '699199065804aa000dd35376',
         onReady: function() { cleanup(); },
@@ -138,6 +143,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const shouldLoadApollo = process.env.NODE_ENV === "production";
+
   return (
     <html
       lang="en"
@@ -154,12 +161,16 @@ export default function RootLayout({
         <Script id="theme-init" strategy="beforeInteractive">
           {themeInitScript}
         </Script>
-        <Script id="apollo-tracker" strategy="beforeInteractive">
-          {apolloScript}
-        </Script>
-        <Script id="apollo-inbound" strategy="beforeInteractive">
-          {apolloInboundScript}
-        </Script>
+        {shouldLoadApollo ? (
+          <>
+            <Script id="apollo-tracker" strategy="beforeInteractive">
+              {apolloScript}
+            </Script>
+            <Script id="apollo-inbound" strategy="beforeInteractive">
+              {apolloInboundScript}
+            </Script>
+          </>
+        ) : null}
         <Providers>{children}</Providers>
       </body>
     </html>

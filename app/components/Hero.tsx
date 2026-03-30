@@ -9,6 +9,7 @@ import { useHeroStats } from "@/app/hooks/useHeroStats";
 
 const HERO_STAT_THEMES = ["mint", "lavender", "peach", "sky"] as const;
 const AMBIENT_PARTICLE_COUNT = 80;
+const toFixedString = (value: number, digits: number) => value.toFixed(digits);
 
 function useCountUp(end: number, durationMs = 1800, startOn = true) {
   const [count, setCount] = useState(0);
@@ -71,12 +72,12 @@ export default function HeroSection() {
 
         return {
           id: i,
-          left: `${seedA * 100}%`,
-          top: `${seedB * 100}%`,
-          size: 1 + seedC * 3,
-          duration: 10 + seedB * 10,
-          delay: seedA * 5,
-          opacity: 0.1 + seedC * 0.3,
+          left: `${toFixedString(seedA * 100, 4)}%`,
+          top: `${toFixedString(seedB * 100, 4)}%`,
+          sizePx: `${toFixedString(1 + seedC * 3, 5)}px`,
+          durationSec: `${toFixedString(10 + seedB * 10, 4)}s`,
+          delaySec: `${toFixedString(seedA * 5, 6)}s`,
+          opacity: toFixedString(0.1 + seedC * 0.3, 6),
         };
       }),
     []
@@ -203,10 +204,10 @@ export default function HeroSection() {
               style={{
                 left: particle.left,
                 top: particle.top,
-                width: `${particle.size}px`,
-                height: `${particle.size}px`,
-                animationDuration: `${particle.duration}s`,
-                animationDelay: `${particle.delay}s`,
+                width: particle.sizePx,
+                height: particle.sizePx,
+                animationDuration: particle.durationSec,
+                animationDelay: particle.delaySec,
                 opacity: particle.opacity,
               }}
             />
