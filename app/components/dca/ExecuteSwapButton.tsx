@@ -55,10 +55,7 @@ export function ExecuteSwapButton({
 
   if (!isReady) {
     return (
-      <span
-        className="inline-flex items-center gap-1.5 rounded-full bg-[var(--hero-muted)]/15 px-2.5 py-1 text-xs font-medium text-[var(--hero-muted)]"
-        title="Next run is in cooldown"
-      >
+      <span className="plan-cooldown-chip" title="Next run is in cooldown">
         <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
@@ -72,7 +69,8 @@ export function ExecuteSwapButton({
       <button
         onClick={handleExecute}
         disabled={isPending || disabled}
-        className="inline-flex min-w-[130px] items-center justify-center gap-2 rounded-lg bg-[color-mix(in_srgb,var(--hero-primary)_80%,var(--hero-secondary))] px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:shadow-lg hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed"
+        data-loading={isPending ? "true" : undefined}
+        className="ss-btn ss-btn-success ss-btn-sm ss-btn-play min-w-[130px]"
       >
         {isPending ? (
           <>

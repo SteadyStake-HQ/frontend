@@ -1,76 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useDashboardStats } from "./DashboardStatsContext";
-import { LoadingSkeleton } from "../LoadingComponents";
-
-const TILT_MAX = 8;
-const TILT_SMOOTH = 0.15;
-
-function StatCard3D({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const innerRef = useRef<HTMLDivElement>(null);
-  const rotateRef = useRef({ x: 0, y: 0 });
-  const targetRef = useRef({ x: 0, y: 0 });
-  const rafRef = useRef<number | null>(null);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const card = cardRef.current;
-    const inner = innerRef.current;
-    if (!card || !inner) return;
-    const rect = card.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5;
-    const y = (e.clientY - rect.top) / rect.height - 0.5;
-    targetRef.current = { x: -y * TILT_MAX, y: x * TILT_MAX };
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    targetRef.current = { x: 0, y: 0 };
-  }, []);
-
-  useEffect(() => {
-    const animate = () => {
-      const target = targetRef.current;
-      let { x, y } = rotateRef.current;
-      x += (target.x - x) * TILT_SMOOTH;
-      y += (target.y - y) * TILT_SMOOTH;
-      if (Math.abs(x) < 0.1 && Math.abs(y) < 0.1 && target.x === 0 && target.y === 0) {
-        x = 0;
-        y = 0;
-      }
-      rotateRef.current = { x, y };
-      const inner = innerRef.current;
-      if (inner) {
-        const scale = target.x !== 0 || target.y !== 0 ? 1.02 : 1;
-        inner.style.transform = `rotateX(${x}deg) rotateY(${y}deg) scale(${scale})`;
-      }
-      rafRef.current = requestAnimationFrame(animate);
-    };
-    rafRef.current = requestAnimationFrame(animate);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
-
-  return (
-    <div
-      ref={cardRef}
-      className={`stat-card-3d ${className}`}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-    >
-      <div ref={innerRef} className="stat-card-3d-inner h-full rounded-2xl">
-        {children}
-      </div>
-    </div>
-  );
-}
+import { Card3D } from "../Card3D";
 
 /** Compact skeleton for stat number (single line) */
 export function StatValueSkeleton() {
@@ -130,43 +62,70 @@ export function DashboardStats() {
 
   const stats = [
     {
-      label: "USDC balance",
+      label: "Ready to invest",
       value: isLoadingBalance ? null : `${usdcBalance} USDC`,
-      sub: "Available to deposit",
-      icon: "💰",
+      sub: "Available in your wallet",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M4 7.5h15a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2v-12a2 2 0 012-2h12" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M16 12h5v4h-5a2 2 0 010-4z" />
+        </svg>
+      ) as ReactNode,
       theme: "mint" as const,
     },
     {
-      label: "Total deposited",
+      label: "Plan funding",
       value: isLoadingStats ? null : totalDeposited > 0 ? `$${totalDeposited.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—",
-      sub: "≈ Across active plans",
-      icon: "✨",
+      sub: "USDC committed across plans",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M4 18V9m5 9V5m6 13v-7m5 7V3" />
+        </svg>
+      ) as ReactNode,
       theme: "lavender" as const,
     },
     {
       label: "Active plans",
       value: isLoadingStats ? null : activePlanCount.toString(),
-      sub: "DCA schedules",
-      icon: "📋",
+      sub: "Recurring schedules running",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <rect x="4" y="5" width="16" height="15" rx="3" strokeWidth="1.8" />
+          <path strokeLinecap="round" strokeWidth="1.8" d="M8 3v4m8-4v4M4 10h16m-11 4h6" />
+        </svg>
+      ) as ReactNode,
       theme: "peach" as const,
     },
     {
       label: "Next DCA in",
-      sub: "Earliest execution",
-      icon: "⏱️",
+      sub: "Until the next scheduled buy",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <circle cx="12" cy="13" r="8" strokeWidth="1.8" />
+          <path strokeLinecap="round" strokeWidth="1.8" d="M12 9v4l2.5 1.5M9 3h6" />
+        </svg>
+      ) as ReactNode,
       theme: "sky" as const,
       isCountdown: true as const,
     },
   ];
 
   return (
-    <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <section className="dashboard-metrics mb-8" aria-labelledby="dashboard-metrics-title">
+      <div className="dashboard-section-heading">
+        <div>
+          <p className="dashboard-section-kicker">At a glance</p>
+          <h2 id="dashboard-metrics-title">Your DCA health</h2>
+        </div>
+        <p>Live wallet and on-chain plan data</p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {stats.map((stat) => (
-        <StatCard3D key={stat.label} className="dashboard-stagger-item">
-          <div className={`stat-card-sweet stat-card-${stat.theme} h-full rounded-2xl p-5`}>
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-lg" aria-hidden>{stat.icon}</span>
-              <p className="text-xs font-semibold uppercase tracking-wider opacity-90">
+        <Card3D key={stat.label} className="dashboard-stagger-item">
+          <div className={`landing-card-sweet landing-card-${stat.theme} h-full p-5`}>
+            <div className="mb-2 flex items-center gap-2.5">
+              <span className="stat-card-tile" aria-hidden>{stat.icon}</span>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--hero-muted)]">
                 {stat.label}
               </p>
             </div>
@@ -183,10 +142,11 @@ export function DashboardStats() {
                 stat.value
               )}
             </div>
-            <p className="mt-1.5 text-xs font-medium opacity-80">{stat.sub}</p>
+            <p className="mt-1.5 text-xs font-medium text-[var(--hero-muted)]">{stat.sub}</p>
           </div>
-        </StatCard3D>
+        </Card3D>
       ))}
-    </div>
+      </div>
+    </section>
   );
 }

@@ -304,7 +304,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
               <button
                 type="button"
                 onClick={() => switchChain?.({ chainId: selectedChainId })}
-                className="rounded-lg bg-amber-500/20 px-3 py-2 text-sm font-medium text-amber-800 dark:text-amber-200 transition-colors hover:bg-amber-500/30"
+                className="ss-btn ss-btn-soft ss-btn-sm self-start"
               >
                 Switch network
               </button>
@@ -333,7 +333,8 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                     type="button"
                     disabled={!amount || isApproving || !!pendingApproveHash || isDepositing}
                     onClick={handleApprove}
-                    className="w-full rounded-xl border border-[var(--hero-primary)]/30 bg-[var(--hero-primary)]/10 px-4 py-2.5 text-sm font-semibold text-[var(--hero-primary)] transition-colors hover:bg-[var(--hero-primary)]/15 disabled:opacity-50 disabled:cursor-not-allowed"
+                    data-loading={isApproving || pendingApproveHash ? "true" : undefined}
+                    className="ss-btn ss-btn-soft ss-btn-block"
                   >
                     {isApproving || pendingApproveHash ? "Confirming…" : "Approve & Deposit"}
                   </button>
@@ -342,8 +343,8 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                     type="button"
                     disabled={!canDeposit || isDepositing}
                     onClick={() => handleDeposit()}
-                    className="w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ background: "linear-gradient(135deg, var(--hero-primary), var(--hero-secondary))" }}
+                    data-loading={isDepositing ? "true" : undefined}
+                    className="ss-btn ss-btn-primary ss-btn-block"
                   >
                     {isDepositing ? "Confirming…" : "Deposit"}
                   </button>

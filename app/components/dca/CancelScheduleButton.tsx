@@ -68,10 +68,7 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
 
   if (success) {
     return (
-      <button
-        disabled
-        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-300 text-gray-500 rounded-md cursor-not-allowed text-sm font-medium"
-      >
+      <button disabled className="ss-btn ss-btn-soft ss-btn-sm">
         <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
         </svg>
@@ -122,11 +119,11 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
             </div>
           )}
 
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <button
               onClick={() => setShowConfirm(false)}
               disabled={isSubmitting || isLoading}
-              className="inline-flex flex-1 items-center justify-center gap-2 px-4 py-2 border border-[var(--hero-muted)]/30 rounded-lg text-[var(--foreground)] hover:bg-[var(--hero-muted)]/10 disabled:opacity-50 transition"
+              className="ss-btn ss-btn-soft ss-btn-block flex-1"
             >
               <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -136,7 +133,8 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
             <button
               onClick={handleCancel}
               disabled={isSubmitting || isLoading}
-              className="inline-flex flex-1 items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
+              data-loading={isSubmitting || isLoading ? "true" : undefined}
+              className="ss-btn ss-btn-danger ss-btn-block flex-1"
             >
               {isSubmitting || isLoading ? (
                 <>
@@ -162,10 +160,7 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
   }
 
   return (
-    <button
-      onClick={() => setShowConfirm(true)}
-      className="inline-flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition text-sm font-medium"
-    >
+    <button onClick={() => setShowConfirm(true)} className="ss-btn ss-btn-danger ss-btn-sm">
       <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
       </svg>

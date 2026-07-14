@@ -48,7 +48,7 @@ function CustomTooltip({
   );
 }
 
-export function DashboardCharts() {
+export function DashboardCharts({ onAddPlan }: { onAddPlan?: () => void }) {
   const {
     totalDeposited,
     depositsPerPlan,
@@ -109,19 +109,22 @@ export function DashboardCharts() {
   if (!hasPlans && !isLoading && historyPoints.length === 0) {
     return (
       <div className="mb-10">
-        <div className="rounded-2xl border border-[var(--hero-muted)]/10 bg-[var(--background)] p-8 shadow-sm">
+        <div className="dashboard-panel p-8">
           <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Portfolio value
+            Funding activity
           </h2>
           <div className="mt-6 flex h-48 flex-col items-center justify-center rounded-xl bg-[var(--hero-muted)]/5 text-center">
             <p className="text-sm text-[var(--hero-muted)]">
-              No DCA plans yet
+              Your funding activity will appear here
             </p>
             <p className="mt-1 text-xs text-[var(--hero-muted)]/80">
-              Create a plan to see your portfolio value here, or connect with
-              the same wallet used for automation to see historical data from the
-              backend.
+              Create a plan and this chart will show how much USDC you have committed over time.
             </p>
+            {onAddPlan && (
+              <button type="button" onClick={onAddPlan} className="dashboard-empty-action">
+                Create a plan
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -131,9 +134,9 @@ export function DashboardCharts() {
   if (!hasPlans && isLoading) {
     return (
       <div className="mb-10">
-        <div className="rounded-2xl border border-[var(--hero-muted)]/10 bg-[var(--background)] p-6 shadow-sm">
+        <div className="dashboard-panel p-6">
           <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Portfolio value
+            Funding activity
           </h2>
           <div className="mt-4 flex h-64 items-center justify-center rounded-xl bg-[var(--hero-muted)]/5">
             <p className="text-sm text-[var(--hero-muted)]">
@@ -148,9 +151,9 @@ export function DashboardCharts() {
   if (data.length === 0) {
     return (
       <div className="mb-10">
-        <div className="rounded-2xl border border-[var(--hero-muted)]/10 bg-[var(--background)] p-6 shadow-sm">
+        <div className="dashboard-panel p-6">
           <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Portfolio value
+            Funding activity
           </h2>
           <div className="mt-4 flex h-64 items-center justify-center rounded-xl bg-[var(--hero-muted)]/5">
             <p className="text-sm text-[var(--hero-muted)]">Loading...</p>
@@ -162,15 +165,18 @@ export function DashboardCharts() {
 
   return (
     <div className="mb-10">
-      <div className="rounded-2xl border border-[var(--hero-muted)]/10 bg-[var(--background)] p-4 shadow-sm sm:p-5">
+      <div className="dashboard-panel p-4 sm:p-5">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-base font-semibold text-[var(--foreground)] sm:text-lg">
-            Portfolio value
-          </h2>
+          <div>
+            <p className="dashboard-section-kicker">Progress</p>
+            <h2 className="text-base font-semibold text-[var(--foreground)] sm:text-lg">
+              Funding activity
+            </h2>
+          </div>
           <p className="text-xs text-[var(--hero-muted)] sm:text-sm">
             {isHistoryMode
-              ? "From backend history (total deposited over time)"
-              : "Cumulative by plan"}
+              ? "Deposited USDC over time"
+              : "Committed USDC by plan"}
           </p>
         </div>
 
@@ -230,20 +236,23 @@ export function DashboardCharts() {
                 strokeWidth={2}
                 fill="url(#chartFill)"
                 isAnimationActive={true}
-                animationDuration={400}
+                animationDuration={900}
               />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
-        <p className="mt-3 text-xs text-[var(--hero-muted)]">
-          {isHistoryMode
-            ? `Total deposited over time (${data.length} points from backend)`
-            : `Total: $${totalDeposited.toLocaleString(undefined, {
+        <div className="dashboard-chart-footnote">
+          <p>
+            {isHistoryMode
+              ? `Based on ${data.length} recorded funding updates.`
+              : `Total committed: $${totalDeposited.toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
-              })} USDC across ${depositsPerPlan.length} plan${depositsPerPlan.length !== 1 ? "s" : ""}`}
-        </p>
+                })} USDC across ${depositsPerPlan.length} plan${depositsPerPlan.length !== 1 ? "s" : ""}.`}
+          </p>
+          <p>This is plan funding, not the live market value of purchased tokens.</p>
+        </div>
       </div>
     </div>
   );

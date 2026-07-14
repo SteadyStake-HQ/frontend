@@ -191,7 +191,7 @@ export function ExecuteAllModal({
             <button
               type="button"
               onClick={onClose}
-              className="btn btn-primary w-full rounded-xl gap-2"
+              className="ss-btn ss-btn-primary ss-btn-block"
             >
               <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

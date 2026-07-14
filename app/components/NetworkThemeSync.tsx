@@ -5,7 +5,12 @@ import { useAccount } from "wagmi";
 import { usePathname } from "next/navigation";
 import { CHAIN_THEME } from "@/config/wagmi";
 
-const HERO_VARS = ["--hero-primary", "--hero-secondary", "--hero-primary-glow"] as const;
+const HERO_VARS = [
+  "--hero-primary",
+  "--hero-secondary",
+  "--hero-primary-glow",
+  "--on-brand",
+] as const;
 
 /**
  * Syncs the selected network's brand colors to CSS variables so the gradient
@@ -33,6 +38,8 @@ export function NetworkThemeSync() {
       root.style.setProperty("--hero-primary", theme.primary);
       root.style.setProperty("--hero-secondary", theme.secondary);
       root.style.setProperty("--hero-primary-glow", theme.glow);
+      if (theme.onBrand) root.style.setProperty("--on-brand", theme.onBrand);
+      else root.style.removeProperty("--on-brand");
     } else {
       HERO_VARS.forEach((v) => root.style.removeProperty(v));
     }

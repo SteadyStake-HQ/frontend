@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useChainModal } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
@@ -14,6 +15,7 @@ const NAV = [
   { label: "Problem", href: "#problem" },
   { label: "Networks", href: "#networks" },
   { label: "How it works", href: "#how-it-works" },
+  { label: "Economics", href: "#economics" },
   { label: "Roadmap", href: "#roadmap" },
 ] as const;
 
@@ -82,8 +84,8 @@ function SwitchNetworkButton({ large = false }: { large?: boolean }) {
   const iconSize = large ? "h-6 w-6" : "h-5 w-5";
   const chevronSize = large ? "h-4 w-4" : "h-3.5 w-3.5";
   const btnClass = large
-    ? "flex h-10 items-center gap-2 rounded-xl border border-[var(--hero-muted)]/20 bg-[color-mix(in_srgb,var(--foreground)_0.04)] px-4 text-sm font-medium text-[var(--foreground)] transition-colors hover:border-[var(--hero-primary)]/30 hover:bg-[var(--hero-primary)]/5"
-    : "flex h-10 items-center gap-1.5 rounded-xl border border-[var(--hero-muted)]/20 bg-[color-mix(in_srgb,var(--foreground)_0.04)] px-2.5 text-xs font-medium text-[var(--foreground)] transition-colors hover:border-[var(--hero-primary)]/30 hover:bg-[var(--hero-primary)]/5";
+    ? "ss-btn ss-btn-secondary ss-btn-sm ss-btn-nudge-y h-10 px-4 text-sm"
+    : "ss-btn ss-btn-secondary ss-btn-sm ss-btn-nudge-y h-10 gap-1.5 px-2.5";
 
   return (
     <button
@@ -154,16 +156,27 @@ export function Header() {
         <div className="flex items-center gap-2 md:gap-4">
           <Link
             href="/"
-            className="flex items-center text-[26px] font-bold tracking-tight transition-opacity hover:opacity-90"
-            style={{
-              background:
-                "linear-gradient(135deg, var(--hero-primary), var(--hero-secondary))",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
-            }}
+            className="hd-brand"
+            aria-label="SteadyStake home"
           >
-            SteadyStake
+            <span className="hd-brand-mark" aria-hidden="true">
+              <span className="hd-brand-halo" />
+              <Image
+                src="/logo.png"
+                alt=""
+                width={42}
+                height={40}
+                priority
+                className="hd-brand-logo"
+              />
+            </span>
+            <span className="hd-brand-copy">
+              <span className="hd-brand-wordmark">
+                <span className="hd-brand-steady">Steady</span>
+                <span className="hd-brand-stake">Stake</span>
+              </span>
+              <span className="hd-brand-tagline">Automated crypto savings</span>
+            </span>
           </Link>
           {!isDashboard && (
             <nav
@@ -200,13 +213,9 @@ export function Header() {
           {!isDashboard && (
             <Link
               href="/dashboard"
-              className="startdca-btn flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-semibold text-white shadow-[0_0_12px_var(--hero-primary-glow)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_24px_var(--hero-primary-glow)] hover:brightness-110 sm:inline-flex"
-              style={{
-                background:
-                  "linear-gradient(90deg, #ff4fa3 0%, #8b5cf6 55%, #38bdf8 100%)",
-              }}
+              className="ss-btn ss-btn-primary ss-btn-sm ss-btn-glow h-10"
             >
-              <StartDCAIcon className="h-4 w-4 shrink-0 text-white" />
+              <StartDCAIcon className="h-4 w-4 shrink-0" />
               Start DCA
             </Link>
           )}

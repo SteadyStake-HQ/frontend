@@ -14,7 +14,7 @@ export function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
 
 export function LoadingCard({ message }: { message?: string }) {
   return (
-    <div className="rounded-2xl border border-[var(--hero-muted)]/10 bg-[var(--background)] p-8 shadow-sm">
+    <div className="dashboard-panel p-8">
       <div className="flex flex-col items-center justify-center gap-4">
         <LoadingSpinner size="lg" />
         {message && (

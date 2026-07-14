@@ -165,6 +165,18 @@ export const DCA_VAULT_ABI = [
   },
   {
     type: "event",
+    name: "ScheduleExecuted",
+    inputs: [
+      { name: "user", type: "address", indexed: true },
+      { name: "scheduleId", type: "uint256", indexed: true },
+      { name: "targetToken", type: "address", indexed: false },
+      { name: "usdcAmount", type: "uint256", indexed: false },
+      { name: "tokenOut", type: "uint256", indexed: false },
+      { name: "fee", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
     name: "ScheduleCancelled",
     inputs: [
       { name: "user", type: "address", indexed: true },

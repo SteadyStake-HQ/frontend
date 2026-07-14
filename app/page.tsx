@@ -4,8 +4,8 @@ import HeroSection from "./components/Hero";
 import { ProblemSolution } from "./components/ProblemSolution";
 import { WhyBase } from "./components/WhyBase";
 import { HowItWorks } from "./components/HowItWorks";
+import { Economics } from "./components/Economics";
 import { Roadmap } from "./components/Roadmap";
-import { WhyFund } from "./components/WhyFund";
 import { Vision } from "./components/Vision";
 import { Footer } from "./components/Footer";
 
@@ -25,8 +25,8 @@ export default function Home() {
           <ProblemSolution />
           <WhyBase />
           <HowItWorks />
+          <Economics />
           <Roadmap />
-          <WhyFund />
           <Vision />
           <Footer />
         </div>

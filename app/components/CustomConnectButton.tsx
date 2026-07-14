@@ -6,8 +6,7 @@ function truncateAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-const baseButton =
-  "inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--hero-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] active:scale-[0.98]";
+const baseButton = "ss-btn";
 
 export interface CustomConnectButtonProps {
   /** Label when disconnected (e.g. "Connect wallet" or "Start DCA — Connect wallet") */
@@ -30,7 +29,7 @@ export function CustomConnectButton({
   className,
 }: CustomConnectButtonProps) {
   const isSmall = size === "sm";
-  const padding = isSmall ? "h-10 px-3 text-sm rounded-xl" : "px-6 py-3 text-base";
+  const padding = isSmall ? "ss-btn-sm h-10 text-sm" : "ss-btn-lg";
 
   return (
     <ConnectButton.Custom>
@@ -45,7 +44,8 @@ export function CustomConnectButton({
         if (!mounted) {
           return (
             <div
-              className={`${baseButton} ${padding} border border-[var(--hero-muted)]/20 bg-[var(--hero-muted)]/10 text-[var(--hero-muted)] ${className ?? ""}`}
+              className={`${baseButton} ss-btn-secondary ${padding} text-[var(--hero-muted)] ${className ?? ""}`}
+              aria-disabled="true"
             >
               <span className="inline-block h-4 w-4 animate-pulse rounded-full bg-current opacity-60" />
               Connecting…
@@ -60,11 +60,9 @@ export function CustomConnectButton({
             <button
               type="button"
               onClick={openConnectModal}
-              className={`${baseButton} ${padding} ${
-                isPrimary
-                  ? "bg-[linear-gradient(90deg,#ff4fa3_0%,#8b5cf6_55%,#38bdf8_100%)] text-white shadow-[0_8px_26px_rgba(255,79,163,0.32)] hover:brightness-110 hover:shadow-[0_10px_30px_rgba(139,92,246,0.4)]"
-                  : "border border-[var(--hero-muted)]/30 bg-transparent text-[var(--foreground)] hover:border-[var(--hero-primary)]/50 hover:bg-[color-mix(in_srgb,var(--hero-primary)_0.08,transparent)]"
-              } ${className ?? ""}`}
+              className={`${baseButton} ${
+                isPrimary ? "ss-btn-primary" : "ss-btn-secondary"
+              } ${padding} ${className ?? ""}`}
             >
               <svg
                 className="h-5 w-5 shrink-0"
@@ -91,7 +89,7 @@ export function CustomConnectButton({
             <button
               type="button"
               onClick={openChainModal}
-              className={`${baseButton} ${padding} border border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400 ${className ?? ""}`}
+              className={`${baseButton} ${padding} border border-amber-500/50 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-400 ${className ?? ""}`}
             >
               <svg
                 className="h-5 w-5 shrink-0"
@@ -118,7 +116,7 @@ export function CustomConnectButton({
           <button
             type="button"
             onClick={openAccountModal}
-            className={`${baseButton} ${padding} border border-[var(--hero-muted)]/20 bg-[color-mix(in_srgb,var(--foreground)_0.04)] text-[var(--foreground)] hover:border-[var(--hero-primary)]/30 hover:bg-[color-mix(in_srgb,var(--hero-primary)_0.06)] ${className ?? ""}`}
+            className={`${baseButton} ss-btn-secondary ss-btn-nudge-y ${padding} ${className ?? ""}`}
           >
             {chain?.hasIcon && chain.iconUrl && (
               <img

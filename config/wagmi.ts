@@ -37,17 +37,19 @@ export const CHAIN_ICON_URLS: Record<number, string> = {
 /** Gradient/theme colors per network for background and accents (primary, secondary, glow). */
 export const CHAIN_THEME: Record<
   number,
-  { primary: string; secondary: string; glow: string }
+  { primary: string; secondary: string; glow: string; onBrand?: string }
 > = {
   [base.id]: {
-    primary: "#0052FF",
-    secondary: "#3385FF",
-    glow: "rgba(0, 82, 255, 0.28)",
+    primary: "#38BDF8",
+    secondary: "#7DD3FC",
+    glow: "rgba(56, 189, 248, 0.3)",
+    onBrand: "#082F49",
   },
   [baseSepolia.id]: {
-    primary: "#0052FF",
-    secondary: "#3385FF",
-    glow: "rgba(0, 82, 255, 0.28)",
+    primary: "#38BDF8",
+    secondary: "#7DD3FC",
+    glow: "rgba(56, 189, 248, 0.3)",
+    onBrand: "#082F49",
   },
   [sepolia.id]: {
     primary: "#627EEA",
@@ -58,6 +60,7 @@ export const CHAIN_THEME: Record<
     primary: "#F0B90B",
     secondary: "#F8D12F",
     glow: "rgba(240, 185, 11, 0.3)",
+    onBrand: "#2A2100",
   },
   [kava.id]: {
     primary: "#FF564F",
@@ -105,6 +108,10 @@ type ChainEntry = (typeof ALL_CHAINS)[number];
 export const config = getDefaultConfig({
   appName: "SteadyStake",
   projectId: projectId || "YOUR_PROJECT_ID",
+  // Defer persisted wallet-store hydration until after React mounts. Without
+  // this, Wagmi's Hydrate component mutates its external store during render,
+  // which React 19 reports as a cross-component update on DashboardPage.
+  ssr: true,
   chains: ALL_CHAINS.filter((c) => SUPPORTED_CHAIN_IDS.includes(c.id)) as [ChainEntry, ...ChainEntry[]],
   transports: Object.fromEntries(
     SUPPORTED_CHAIN_IDS.filter((id) => id in ALL_TRANSPORTS).map((id) => [id, ALL_TRANSPORTS[id as keyof typeof ALL_TRANSPORTS]])
