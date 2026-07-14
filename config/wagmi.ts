@@ -68,9 +68,13 @@ export const CHAIN_THEME: Record<
     glow: "rgba(255, 86, 79, 0.28)",
   },
   [polygon.id]: {
-    primary: "#8247E5",
-    secondary: "#9B6BED",
-    glow: "rgba(130, 71, 229, 0.28)",
+    // Polygon's brand purple (#8247E5) is too dark to sit under the UI's light
+    // text and glows, so we lift it to a softer violet — same 400/300 + dark-ink
+    // shape as Base above, which keeps the two networks feeling like one system.
+    primary: "#A78BFA",
+    secondary: "#C4B5FD",
+    glow: "rgba(167, 139, 250, 0.32)",
+    onBrand: "#2E1065",
   },
 };
 
