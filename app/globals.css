@@ -10734,10 +10734,6 @@ a[href] {
     animation: none !important;
   }
 
-  .dm-chart-curve path {
-    stroke-dashoffset: 0;
-  }
-
   .dm-freq-thumb,
   .dm-switch::after,
   .dm-close,
