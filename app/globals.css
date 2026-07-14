@@ -1928,6 +1928,11 @@ a[href] {
 .pn-dash {
   position: absolute;
   inset: 0.6rem;
+  /* An <svg> is a replaced element: absolutely positioned, it takes its size
+     from its intrinsic size, not from the insets, so it must be sized here or
+     the frame collapses to a default box in the corner. */
+  width: calc(100% - 1.2rem);
+  height: calc(100% - 1.2rem);
   z-index: 0;
   overflow: visible; /* the stroke straddles the rect edge; let it */
   pointer-events: none;
@@ -2056,14 +2061,17 @@ a[href] {
 }
 
 .pn-bars {
+  /* One column rhythm, shared by the bars and the coins that fall into them. */
+  --bar-w: 1.15rem;
+  --bar-gap: 0.55rem;
   position: relative;
   display: flex;
   align-items: flex-end;
-  gap: 0.55rem;
+  gap: var(--bar-gap);
   height: 8rem;
 }
-.pn-bars span {
-  width: 1.15rem;
+.pn-bars > span {
+  width: var(--bar-w);
   height: var(--h);
   border-radius: 0.35rem 0.35rem 0.15rem 0.15rem;
   background: linear-gradient(
@@ -2078,18 +2086,23 @@ a[href] {
   animation-delay: calc(var(--i) * 0.9s);
 }
 
-/* The coin steps one slot per tick and falls into it — the schedule, made
-   literal. steps(7) so it lands *on* a bar, never between two. */
-.pn-coin-lane {
+/* One coin per tick of the schedule, falling into the column it funds. Each
+   coin rests at `bottom: var(--h)` — its own bar's height — so it lands on top
+   of that bar whatever the bar's height is, then fades as the bar absorbs it:
+   the buy becomes the position. Coins share the bars' delay, so coin i lands on
+   the beat that bar i springs up. */
+.pn-coins {
   position: absolute;
-  bottom: 9.6rem;
-  left: 0;
-  animation: pn-coin-step 6.3s steps(7, end) infinite;
+  inset: 0;
+  pointer-events: none;
 }
 .pn-coin {
+  position: absolute;
+  bottom: var(--h);
+  left: calc(var(--i) * (var(--bar-w) + var(--bar-gap)));
   display: grid;
-  width: 1.15rem;
-  height: 1.15rem;
+  width: var(--bar-w);
+  height: var(--bar-w);
   place-items: center;
   border-radius: 50%;
   color: var(--on-brand);
@@ -2097,7 +2110,9 @@ a[href] {
   box-shadow: 0 0 12px -1px color-mix(in srgb, var(--hero-primary) 85%, transparent);
   font-size: 0.6rem;
   font-weight: 900;
-  animation: pn-coin-drop 0.9s cubic-bezier(0.55, 0, 0.9, 0.6) infinite;
+  opacity: 0;
+  animation: pn-coin-drop 6.3s cubic-bezier(0.5, 0, 0.9, 0.5) infinite backwards;
+  animation-delay: calc(var(--i) * 0.9s);
 }
 
 @keyframes pn-bar-grow {
@@ -2120,26 +2135,23 @@ a[href] {
   }
 }
 
-@keyframes pn-coin-step {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(11.9rem);
-  }
-}
-
+/* Falls, lands on its bar as that bar springs up to meet it, then fades into
+   it. The rest of the cycle it waits offstage for its next tick. */
 @keyframes pn-coin-drop {
   0% {
-    transform: translateY(-2.2rem);
+    transform: translateY(-2.6rem);
     opacity: 0;
   }
-  25% {
+  2% {
     opacity: 1;
   }
-  70%,
+  7% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  16%,
   100% {
-    transform: translateY(1.5rem);
+    transform: translateY(0);
     opacity: 0;
   }
 }
@@ -2177,16 +2189,18 @@ a[href] {
   .pn-dash rect,
   .pn-kicker svg,
   .pn-aura,
-  .pn-bars span,
-  .pn-coin-lane,
+  .pn-bars > span,
   .pn-coin {
     animation: none !important;
   }
-  .pn-bars span {
+  .pn-bars > span {
     transform: none;
   }
-  .pn-coin-lane {
-    display: none;
+  /* Still legible without motion: a coin resting on each bar says the same
+     thing the fall does. */
+  .pn-coin {
+    opacity: 1;
+    transform: none;
   }
 }
 
@@ -9275,6 +9289,15 @@ a[href] {
   animation-delay: 0.3s;
 }
 
+/* The intro animation fills forwards on opacity/transform, so every field stays
+   a stacking context — which traps the token popup's z-index inside its own
+   field and lets the fields below paint over it. Lift whichever field is
+   holding an open popup out of that trap. */
+.dm-main > *:has(.dm-pop) {
+  position: relative;
+  z-index: 30;
+}
+
 /* --- Balance strip --- */
 .dm-balance {
   display: flex;
@@ -10029,26 +10052,6 @@ a[href] {
   background-size: 100% 1.55rem;
 }
 
-/* The curve a DCA position traces: it only ever goes up and to the right */
-.dm-chart-curve {
-  position: absolute;
-  inset: 1rem 0.85rem 0.7rem;
-  overflow: visible;
-  color: var(--hero-accent);
-  pointer-events: none;
-}
-
-.dm-chart-curve path {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--hero-accent) 60%, transparent));
-  stroke-dasharray: 220;
-  stroke-dashoffset: 220;
-  animation: dm-curve-draw 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
 .dm-bars {
   position: relative;
   display: flex;
@@ -10608,12 +10611,6 @@ a[href] {
   }
 }
 
-@keyframes dm-curve-draw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
 @keyframes dm-rail-fill {
   from {
     transform: scaleY(0);
@@ -10725,7 +10722,6 @@ a[href] {
   .dm-live-dot::after,
   .dm-bar,
   .dm-bar::after,
-  .dm-chart-curve path,
   .dm-auto-on .dm-auto-icon svg,
   .dm-pop,
   .dm-prog,

@@ -831,18 +831,6 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
     const ramp = 32 + (barCount === 1 ? 40 : (i / (barCount - 1)) * 56);
     return Math.max(14, Math.min(100, ramp + wobble[i % wobble.length]));
   });
-  const curveD =
-    barCount >= 2
-      ? `M ${bars
-          .map((_, i) => {
-            const t = i / (barCount - 1);
-            const x = t * 100;
-            const y = 92 - Math.pow(t, 0.82) * 74;
-            return `${x.toFixed(1)},${y.toFixed(1)}`;
-          })
-          .join(" L ")}`
-      : null;
-
   const isBusy = stage !== null || isSubmitting || isCreating || isApproving;
   const canSubmit =
     isConnected && hasPlan && Boolean(selectedTokenAddress) && hasEnoughBalanceForCreate && !isBusy;
@@ -1326,16 +1314,6 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                               />
                             ))}
                           </div>
-                          {curveD && (
-                            <svg
-                              className="dm-chart-curve"
-                              viewBox="0 0 100 100"
-                              preserveAspectRatio="none"
-                              aria-hidden
-                            >
-                              <path d={curveD} vectorEffect="non-scaling-stroke" />
-                            </svg>
-                          )}
                         </>
                       ) : (
                         <p className="dm-chart-empty">

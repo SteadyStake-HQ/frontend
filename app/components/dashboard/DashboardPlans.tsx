@@ -409,7 +409,8 @@ function CreatePlanCard({ onAddPlan }: { onAddPlan?: () => void }) {
         </button>
       </div>
 
-      {/* One coin per tick of the schedule, one bar where it landed. */}
+      {/* One coin per tick of the schedule, one bar where it landed. Each coin
+          falls into its own column, so it comes to rest on that bar's top. */}
       <div className="pn-stage" aria-hidden>
         <span className="pn-aura" />
         <span className="pn-floor" />
@@ -417,9 +418,17 @@ function CreatePlanCard({ onAddPlan }: { onAddPlan?: () => void }) {
           {CREATE_CARD_BARS.map((height, i) => (
             <span key={height} style={{ "--i": i, "--h": height } as CSSProperties} />
           ))}
-          <span className="pn-coin-lane">
-            <span className="pn-coin">$</span>
-          </span>
+          <div className="pn-coins">
+            {CREATE_CARD_BARS.map((height, i) => (
+              <span
+                key={height}
+                className="pn-coin"
+                style={{ "--i": i, "--h": height } as CSSProperties}
+              >
+                $
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     </div>
