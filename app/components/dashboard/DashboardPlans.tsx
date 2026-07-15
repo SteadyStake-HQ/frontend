@@ -140,7 +140,10 @@ function SchedulePlanCard({
   }, [plan.status, plan.nextExecutionTimestamp]);
 
   const inCooldown = plan.status === "active" && plan.nextExecutionTimestamp > now;
-  const isReady = plan.status === "active" && plan.isReady && !inCooldown;
+  // The contract readiness value stored on the plan is only a snapshot from
+  // the last dashboard fetch. Derive time-based readiness from the live clock
+  // so this button changes at the same instant as the countdown and Execute All.
+  const isReady = plan.status === "active" && !inCooldown;
   const state: PlanVisualState =
     plan.status === "cancelled"
       ? "cancelled"

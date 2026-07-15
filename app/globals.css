@@ -1582,10 +1582,15 @@ a[href] {
     pc-rise 0.75s cubic-bezier(0.22, 1, 0.36, 1) both,
     pc-ready-pulse 2.6s ease-in-out 0.75s infinite;
 }
-/* Hovering hands the shadow back to :hover, which the animation would
-   otherwise outrank. */
+/* Keep the animation declaration stable while hovering. Removing it here used
+   to restart pc-rise on pointer leave, briefly taking the card back to
+   opacity: 0. !important lets the hover shadow outrank the pulse animation
+   without restarting either animation. */
 .plan-card-sweet.pc-ready:hover {
-  animation: none;
+  box-shadow:
+    inset 0 1px 0 var(--card-hi),
+    var(--card-shadow-hover),
+    0 22px 52px -28px color-mix(in srgb, var(--card-accent) 62%, transparent) !important;
 }
 
 /* Completed — the work is done, so the motion stops. Indigo, settled,

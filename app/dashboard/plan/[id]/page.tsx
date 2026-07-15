@@ -248,7 +248,7 @@ export default function PlanPage() {
   const { tokens: supportedTokens } = useSupportedTokens(chainId);
   const scheduleId = parseScheduleIdFromParams(params);
 
-  const { schedule, isReady, isEnrolledForAutoExecution, isLoading, refetch } = useDCASchedule(
+  const { schedule, isEnrolledForAutoExecution, isLoading, refetch } = useDCASchedule(
     scheduleId ?? BigInt(0),
     address,
   );
@@ -544,7 +544,7 @@ export default function PlanPage() {
               <ExecuteSwapButton
                 userAddress={address}
                 scheduleId={scheduleId}
-                isReady={isReady && !inCooldown}
+                isReady={isDue}
                 onSuccess={() => refetch?.()}
                 disabled={inCooldown}
               />
