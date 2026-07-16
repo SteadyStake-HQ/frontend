@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { kv } from "@vercel/kv";
+import { addAutomationUser, isSupabaseConfigured } from "@/lib/automation-users";
 
-const AUTOMATION_USERS_KEY = "dca:automation:users";
+export const runtime = "nodejs";
 
 /**
  * POST /api/automation/register
@@ -16,13 +16,18 @@ export async function POST(request: NextRequest) {
     if (!Number.isInteger(chainId) || chainId <= 0 || !userAddress || !/^0x[a-fA-F0-9]{40}$/.test(userAddress)) {
       return NextResponse.json({ error: "Invalid chainId or userAddress" }, { status: 400 });
     }
-    const member = `${chainId}:${userAddress.toLowerCase()}`;
-    await kv.sadd(AUTOMATION_USERS_KEY, member);
-    return NextResponse.json({ ok: true, registered: member });
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json(
+        { error: "Registration store not configured (set SUPABASE_DB_URL)", ok: false },
+        { status: 503 },
+      );
+    }
+    const registered = await addAutomationUser(chainId, userAddress);
+    return NextResponse.json({ ok: true, registered });
   } catch (e) {
     console.error("[automation/register]", e);
     return NextResponse.json(
-      { error: "Registration failed (check Vercel KV / storage)", ok: false },
+      { error: "Registration failed (check Supabase / SUPABASE_DB_URL)", ok: false },
       { status: 503 }
     );
   }

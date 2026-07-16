@@ -10,7 +10,7 @@ DCA schedules are executed automatically by a **standalone backend executor** (n
 2. **User creates a DCA plan** only if **global** gas tank balance ≥ required gas.
 3. **Frontend** calls `POST /api/automation/register` with `{ chainId, userAddress }` so the backend knows whom to check.
 4. **Backend executor** runs every 5 minutes (e.g. via `npm run loop` in `backend/`):
-   - Reads registered `chainId:userAddress` from KV.
+   - Reads registered `chainId:userAddress` from Supabase.
    - For each user, fetches **global** GasTank balance (sum across all chains with GasTank).
    - For each schedule that is **ready** (`isScheduleReady`), checks that **global** balance ≥ estimated cost.
    - Gets a 0x swap quote, sends **executeSwap** from the **relayer wallet** (relayer pays gas).
@@ -48,7 +48,7 @@ In `backend/`:
 | Variable | Description |
 |----------|-------------|
 | `RELAYER_PRIVATE_KEY` | Wallet that sends executeSwap and recordExecution; must be GasTank executor and hold native gas token. |
-| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Same as frontend (Vercel KV / Upstash Redis). |
+| `SUPABASE_DB_URL` | Supabase Postgres (Session Pooler) connection string, shared with the frontend; stores the registered-user list. |
 | `ZERO_EX_API_KEY` | Optional; for 0x swap quotes. |
 | `GAS_COST_PER_EXECUTION_USDC` | Amount in USD per execution (e.g. `0.01`); converted to 6 decimals when calling recordExecution. |
 | `AUTOMATION_CHAIN_IDS` | Optional; comma-separated chain IDs (e.g. `84532,8453`). Empty = all registered chains. |

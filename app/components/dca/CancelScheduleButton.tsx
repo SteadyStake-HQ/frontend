@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useChainId, usePublicClient } from "wagmi";
 import { useDCAVault, useDCASchedule, useContracts } from "@/app/hooks";
 import { calculateEarlyFee, shouldChargeEarlyFee } from "@/lib/constants";
 import { formatUnits } from "viem";
@@ -27,6 +28,8 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
   const [success, setSuccess] = useState(false);
 
   const queryClient = useQueryClient();
+  const chainId = useChainId();
+  const publicClient = usePublicClient();
   const { contracts } = useContracts();
   const { cancelSchedule, isLoading } = useDCAVault();
   const { schedule: rawSchedule } = useDCASchedule(scheduleId);
@@ -54,7 +57,24 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
     setIsSubmitting(true);
 
     try {
-      await cancelSchedule(Number(scheduleId));
+      const hash = (await cancelSchedule(Number(scheduleId))) as `0x${string}`;
+
+      // Record the cancellation once it's mined. The refunded amount and end date only exist in
+      // this transaction's receipt — the vault zeroes the schedule out — so if we don't store them
+      // now the plan's history is lost. Failing to record must not fail the cancel itself: the
+      // cancel already succeeded on-chain by this point.
+      try {
+        if (publicClient) await publicClient.waitForTransactionReceipt({ hash });
+        const res = await fetch("/api/plans/record", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chainId, txHash: hash }),
+        });
+        if (!res.ok) console.error("[CancelScheduleButton] plan record failed:", await res.text());
+      } catch (e) {
+        console.error("[CancelScheduleButton] plan record failed:", e);
+      }
+
       setSuccess(true);
       setShowConfirm(false);
       const { invalidateDcaDashboardQueries } = await import("@/lib/invalidate-dca-queries");

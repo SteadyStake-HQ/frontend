@@ -550,6 +550,25 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
         }
       }
 
+      // Record the plan to the database now that it is confirmed on-chain. This is what lets the
+      // dashboard and executor read plans without scanning block logs, so do it before enrolling —
+      // an enroll failure must not cost us the record. The server re-reads the receipt itself.
+      if (chainId && pendingCreateTxHash) {
+        try {
+          const res = await fetch("/api/plans/record", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chainId, txHash: pendingCreateTxHash }),
+          });
+          if (!res.ok) {
+            // Not fatal: the plan exists on-chain and a manual reindex can still recover it.
+            console.error("[NewDcaModal] plan record failed:", await res.text());
+          }
+        } catch (e) {
+          console.error("[NewDcaModal] plan record failed:", e);
+        }
+      }
+
       if (enableAutoExecForCreateRef.current && scheduleId != null && address && contracts.DCAVault && !useBatchedCreateRef.current) {
         setStage("enrolling");
         try {
@@ -595,7 +614,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
       }, 1500);
     };
     void run();
-  }, [pendingCreateTxHash, createReceipt, queryClient, onClose, enrolledCount, additionalAutoPlanFeeUsdc6, enrollForAutoExecution, approve, address, contracts.DCAVault, refetchCount, depositToGasTank]);
+  }, [pendingCreateTxHash, createReceipt, queryClient, onClose, enrolledCount, additionalAutoPlanFeeUsdc6, enrollForAutoExecution, approve, address, chainId, contracts.DCAVault, refetchCount, depositToGasTank]);
 
   // If tx reverted, show error and stop pending state
   useEffect(() => {

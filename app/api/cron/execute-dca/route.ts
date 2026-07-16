@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, type Chain } from "viem";
 import { base, baseSepolia, bsc, polygon, sepolia } from "viem/chains";
-import { kv } from "@vercel/kv";
+import { getAutomationUsers } from "@/lib/automation-users";
 import {
   get0xQuote,
   netAmountAfterFee,
@@ -10,7 +10,7 @@ import {
   relayExecuteSwap,
 } from "@/lib/automation";
 
-const AUTOMATION_USERS_KEY = "dca:automation:users";
+export const runtime = "nodejs";
 
 /** Chain IDs that are testnets (use GELATO_RELAY_API_KEY_TESTNET when set). */
 const TESTNET_CHAIN_IDS = new Set([84532, 11155111]); // Base Sepolia, Ethereum Sepolia
@@ -126,10 +126,10 @@ export async function GET(request: NextRequest) {
 
   let members: string[] = [];
   try {
-    members = (await kv.smembers(AUTOMATION_USERS_KEY)) as string[];
+    members = await getAutomationUsers();
   } catch (e) {
-    console.error("[execute-dca] KV smembers failed:", e);
-    return NextResponse.json({ error: "KV unavailable" }, { status: 503 });
+    console.error("[execute-dca] Supabase automation-user read failed:", e);
+    return NextResponse.json({ error: "Registration store unavailable" }, { status: 503 });
   }
 
   const executed: string[] = [];
