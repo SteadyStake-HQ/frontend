@@ -81,8 +81,8 @@
 ### Contract Execution Flow
 ```solidity
 1. User creates schedule with createSchedule()
-2. Schedule is stored with lastExecutionTime = block.timestamp - interval
-3. This makes it immediately ready for first execution
+2. Schedule is stored with lastExecutionTime = block.timestamp
+3. The first execution becomes ready after the selected interval
 4. Anyone can call executeSwap(user, scheduleId, swapData)
 5. Contract checks: block.timestamp >= lastExecutionTime + interval
 6. If ready, executes swap and updates lastExecutionTime

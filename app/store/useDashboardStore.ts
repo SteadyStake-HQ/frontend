@@ -24,9 +24,13 @@ export interface DashboardPlanRecord {
   nextRun: string;
   executionProgress: number;
   status: "active" | "cancelled" | "ended";
+  /** Contract timestamp when a manual execution becomes valid. */
+  contractDueTimestamp: number;
+  /** Contract due time displayed consistently by frontend and backend. */
   nextExecutionTimestamp: number;
   isReady: boolean;
   isEnrolledForAutoExecution: boolean;
+  executionMode: "auto" | "manual" | null;
 }
 
 interface DashboardHistoryPoint {
@@ -47,6 +51,8 @@ interface DashboardStoreState {
   enrolledCount: number;
   plans: DashboardPlanRecord[];
   historyPoints: DashboardHistoryPoint[];
+  backendClockOffsetSeconds: number;
+  backendChainClockOffsetSeconds: number;
   isLoading: boolean;
   isRefreshing: boolean;
   lastFetchedAt: number | null;
@@ -82,6 +88,8 @@ const EMPTY_STATE = {
   enrolledCount: 0,
   plans: [] as DashboardPlanRecord[],
   historyPoints: [] as DashboardHistoryPoint[],
+  backendClockOffsetSeconds: 0,
+  backendChainClockOffsetSeconds: 0,
   isLoading: false,
   isRefreshing: false,
   lastFetchedAt: null as number | null,
@@ -120,8 +128,43 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
 
     try {
       const now = Math.floor(Date.now() / 1000);
-      const [usdcBalanceResult, scheduleCountResult, activeSchedulesResult, enrolledCountResult] =
-        await Promise.all([
+      const timingPromise = fetch(
+        `/api/scheduler/dca-timing?user=${encodeURIComponent(address)}&chainId=${encodeURIComponent(chainId)}`,
+        { cache: "no-store" },
+      )
+        .then(async (response) => {
+          if (!response.ok) return null;
+          return (await response.json()) as {
+            ok: boolean;
+            serverTime: number;
+            chainTime: number;
+            scheduleCount: number;
+            activeScheduleIds: string[];
+            enrolledCount: number;
+            plans: Array<{
+              scheduleId: string;
+              targetToken: string;
+              frequency: number;
+              amountPerInterval: string;
+              lastExecutionTime: number;
+              totalAmount: string;
+              executedCount: number;
+              active: boolean;
+              dueTimestamp: number;
+              ready: boolean;
+              isEnrolledForAutoExecution: boolean;
+              executionMode: "auto" | "manual" | null;
+            }>;
+          };
+        })
+        .catch(() => null);
+      const [
+        usdcBalanceResult,
+        scheduleCountResult,
+        activeSchedulesResult,
+        enrolledCountResult,
+        timingSnapshot,
+      ] = await Promise.all([
           getBalance(config, {
             address: address as `0x${string}`,
             token: contracts.MockUSDC as `0x${string}`,
@@ -148,9 +191,13 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
             args: [address as `0x${string}`],
             chainId: supportedChainId,
           }),
+          timingPromise,
         ]);
 
-      const scheduleCount = Number(scheduleCountResult ?? 0n);
+      const scheduleCount =
+        timingSnapshot?.ok && Number.isSafeInteger(timingSnapshot.scheduleCount)
+          ? timingSnapshot.scheduleCount
+          : Number(scheduleCountResult ?? 0n);
       const activeSchedules = (activeSchedulesResult ?? []) as bigint[];
       const allScheduleIds =
         scheduleCount > 0
@@ -190,6 +237,9 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
           : [];
 
       const tokenList = getTokenList(chainId);
+      const timingByScheduleId = new Map(
+        timingSnapshot?.plans?.map((plan) => [plan.scheduleId, plan]) ?? [],
+      );
 
       const plans = allScheduleIds
         .map<DashboardPlanRecord | null>((scheduleId, index) => {
@@ -198,9 +248,16 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
           const readyResult = planResults[baseIndex + 1];
           const enrolledResult = planResults[baseIndex + 2];
 
-          if (!scheduleResult || scheduleResult.status !== "success") return null;
+          if (
+            (!scheduleResult || scheduleResult.status !== "success") &&
+            !timingByScheduleId.has(scheduleId.toString())
+          ) {
+            return null;
+          }
 
-          const schedule = scheduleResult.result as {
+          const schedule = (
+            scheduleResult?.status === "success" ? scheduleResult.result : null
+          ) as {
             targetToken: string;
             frequency: number;
             amountPerInterval: bigint;
@@ -208,40 +265,60 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
             totalAmount: bigint;
             executedCount: bigint;
             active: boolean;
-          };
+          } | null;
+          const backendTiming = timingByScheduleId.get(scheduleId.toString());
+          const authoritativeSchedule = backendTiming
+            ? {
+                targetToken: backendTiming.targetToken,
+                frequency: backendTiming.frequency,
+                amountPerInterval: BigInt(backendTiming.amountPerInterval),
+                lastExecutionTime: BigInt(backendTiming.lastExecutionTime),
+                totalAmount: BigInt(backendTiming.totalAmount),
+                executedCount: BigInt(backendTiming.executedCount),
+                active: backendTiming.active,
+              }
+            : schedule!;
 
           const matchedToken = tokenList.find(
             (token) =>
-              token.address.toLowerCase() === String(schedule.targetToken).toLowerCase(),
+              token.address.toLowerCase() ===
+              String(authoritativeSchedule.targetToken).toLowerCase(),
           );
           const tokenSymbol =
             matchedToken?.symbol ??
-            `${String(schedule.targetToken).slice(0, 8)}...${String(schedule.targetToken).slice(-6)}`;
+            `${String(authoritativeSchedule.targetToken).slice(0, 8)}...${String(authoritativeSchedule.targetToken).slice(-6)}`;
           const tokenName = matchedToken?.name;
           const tokenLogo = getTokenLogoUrl(
             chainId,
-            String(schedule.targetToken),
+            String(authoritativeSchedule.targetToken),
             matchedToken?.logo,
           );
 
-          const frequencyNum = Number(schedule.frequency);
+          const frequencyNum = Number(authoritativeSchedule.frequency);
           const intervalSeconds = DCA_FREQUENCY_INTERVALS[frequencyNum] ?? 86400;
-          const amountNum = Number(formatUnits(schedule.amountPerInterval, 6));
-          const remainingNum = Number(formatUnits(schedule.totalAmount, 6));
-          const executedCount = Number(schedule.executedCount);
+          const amountNum = Number(formatUnits(authoritativeSchedule.amountPerInterval, 6));
+          const remainingNum = Number(formatUnits(authoritativeSchedule.totalAmount, 6));
+          const executedCount = Number(authoritativeSchedule.executedCount);
           const originalTotalNum = remainingNum + amountNum * executedCount;
           const totalSchedules = Math.max(1, Math.ceil(originalTotalNum / Math.max(amountNum, 0.000001)));
-          const nextExecutionTimestamp =
-            Number(schedule.lastExecutionTime) + intervalSeconds;
+          const contractDueTimestamp =
+            backendTiming?.dueTimestamp ??
+            Number(authoritativeSchedule.lastExecutionTime) + intervalSeconds;
+          const isEnrolledForAutoExecution =
+            backendTiming?.isEnrolledForAutoExecution ??
+            (enrolledResult?.status === "success"
+              ? Boolean(enrolledResult.result)
+              : false);
+          const nextExecutionTimestamp = contractDueTimestamp;
 
           let status: "active" | "cancelled" | "ended" = "active";
           if (executedCount >= totalSchedules || remainingNum <= 0) status = "ended";
-          else if (!schedule.active) status = "cancelled";
+          else if (!authoritativeSchedule.active) status = "cancelled";
 
           return {
             id: scheduleId.toString(),
             scheduleId,
-            targetTokenAddress: String(schedule.targetToken),
+            targetTokenAddress: String(authoritativeSchedule.targetToken),
             targetToken: tokenSymbol,
             tokenName: tokenName ?? undefined,
             tokenLogo: tokenLogo ?? undefined,
@@ -249,19 +326,24 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
             frequency: REVERSE_FREQUENCY_MAP[frequencyNum] || "Unknown",
             totalDeposited: originalTotalNum.toFixed(2),
             totalExecuted: (executedCount * amountNum).toFixed(2),
-            nextRun: formatNextRun(nextExecutionTimestamp, now),
+            nextRun: formatNextRun(
+              nextExecutionTimestamp,
+              timingSnapshot?.chainTime ?? now,
+            ),
             executionProgress:
               status === "active"
                 ? Math.min(100, (executedCount / totalSchedules) * 100)
                 : (executedCount / totalSchedules) * 100,
             status,
+            contractDueTimestamp,
             nextExecutionTimestamp,
             isReady:
-              readyResult?.status === "success" ? Boolean(readyResult.result) : false,
+              backendTiming?.ready ??
+              (readyResult?.status === "success" ? Boolean(readyResult.result) : false),
             isEnrolledForAutoExecution:
-              enrolledResult?.status === "success"
-                ? Boolean(enrolledResult.result)
-                : false,
+              status === "active" && isEnrolledForAutoExecution,
+            executionMode:
+              status === "active" ? backendTiming?.executionMode ?? null : null,
           };
         })
         .filter((plan): plan is DashboardPlanRecord => plan !== null)
@@ -312,13 +394,33 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
         totalDeposited,
         depositsPerPlan,
         nextExecutionTime,
-        activePlanCount: activeSchedules.length,
-        scheduleCount,
-        activeSchedules,
+        activePlanCount:
+          timingSnapshot?.ok && Array.isArray(timingSnapshot.activeScheduleIds)
+            ? timingSnapshot.activeScheduleIds.length
+            : activeSchedules.length,
+        scheduleCount:
+          timingSnapshot?.ok && Number.isSafeInteger(timingSnapshot.scheduleCount)
+            ? timingSnapshot.scheduleCount
+            : scheduleCount,
+        activeSchedules:
+          timingSnapshot?.ok && Array.isArray(timingSnapshot.activeScheduleIds)
+            ? timingSnapshot.activeScheduleIds.map((id) => BigInt(id))
+            : activeSchedules,
         allScheduleIds,
-        enrolledCount: Number(enrolledCountResult ?? 0n),
+        enrolledCount:
+          timingSnapshot?.ok && Number.isSafeInteger(timingSnapshot.enrolledCount)
+            ? timingSnapshot.enrolledCount
+            : Number(enrolledCountResult ?? 0n),
         plans,
         historyPoints,
+        backendClockOffsetSeconds:
+          timingSnapshot?.ok && Number.isFinite(timingSnapshot.serverTime)
+            ? timingSnapshot.serverTime - Math.floor(Date.now() / 1000)
+            : 0,
+        backendChainClockOffsetSeconds:
+          timingSnapshot?.ok && Number.isFinite(timingSnapshot.chainTime)
+            ? timingSnapshot.chainTime - Math.floor(Date.now() / 1000)
+            : 0,
         isLoading: false,
         isRefreshing: false,
         lastFetchedAt: Date.now(),

@@ -7,6 +7,8 @@ export interface AggregatedStats {
   totalDeposited: number;
   nextExecutionIn: string;
   nextExecutionTime: number | null;
+  backendClockOffsetSeconds: number;
+  backendChainClockOffsetSeconds: number;
 }
 
 interface DashboardStatsContextValue {
@@ -16,6 +18,8 @@ interface DashboardStatsContextValue {
   depositsPerPlan: number[];
   nextExecutionIn: string;
   nextExecutionTime: number | null;
+  backendClockOffsetSeconds: number;
+  backendChainClockOffsetSeconds: number;
   activePlanCount: number;
   isLoadingStats: boolean;
   activeSchedules: readonly bigint[];
@@ -24,9 +28,15 @@ interface DashboardStatsContextValue {
 
 const DashboardStatsContext = createContext<DashboardStatsContextValue | null>(null);
 
-function formatNextExecutionIn(targetTimestamp: number | null): string {
+function formatNextExecutionIn(
+  targetTimestamp: number | null,
+  clockOffsetSeconds: number,
+): string {
   if (targetTimestamp == null) return "—";
-  const secondsUntilNext = Math.max(0, targetTimestamp - Math.floor(Date.now() / 1000));
+  const secondsUntilNext = Math.max(
+    0,
+    targetTimestamp - (Math.floor(Date.now() / 1000) + clockOffsetSeconds),
+  );
   if (secondsUntilNext < 60) return "1min";
   if (secondsUntilNext < 3600) return `In ${Math.ceil(secondsUntilNext / 60)}m`;
   if (secondsUntilNext < 86400) return `In ${Math.ceil(secondsUntilNext / 3600)}h`;
@@ -39,6 +49,12 @@ export function DashboardStatsProvider({ children }: { children: React.ReactNode
   const depositsPerPlan = useDashboardStore((state) => state.depositsPerPlan);
   const nextExecutionTime = useDashboardStore((state) => state.nextExecutionTime);
   const activePlanCount = useDashboardStore((state) => state.activePlanCount);
+  const backendClockOffsetSeconds = useDashboardStore(
+    (state) => state.backendClockOffsetSeconds,
+  );
+  const backendChainClockOffsetSeconds = useDashboardStore(
+    (state) => state.backendChainClockOffsetSeconds,
+  );
   const activeSchedules = useDashboardStore((state) => state.activeSchedules);
   const scheduleCount = useDashboardStore((state) => state.scheduleCount);
   const isLoading = useDashboardStore((state) => state.isLoading);
@@ -49,8 +65,13 @@ export function DashboardStatsProvider({ children }: { children: React.ReactNode
       isLoadingBalance: isLoading,
       totalDeposited,
       depositsPerPlan,
-      nextExecutionIn: formatNextExecutionIn(nextExecutionTime),
+      nextExecutionIn: formatNextExecutionIn(
+        nextExecutionTime,
+        backendChainClockOffsetSeconds,
+      ),
       nextExecutionTime,
+      backendClockOffsetSeconds,
+      backendChainClockOffsetSeconds,
       activePlanCount,
       isLoadingStats: isLoading,
       activeSchedules,
@@ -62,6 +83,8 @@ export function DashboardStatsProvider({ children }: { children: React.ReactNode
       totalDeposited,
       depositsPerPlan,
       nextExecutionTime,
+      backendClockOffsetSeconds,
+      backendChainClockOffsetSeconds,
       activePlanCount,
       activeSchedules,
       scheduleCount,

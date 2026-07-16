@@ -60,6 +60,25 @@ export default function DashboardPage() {
     return () => window.removeEventListener(DASHBOARD_REFRESH_EVENT, onRefresh);
   }, [isWalletResolving, isConnected, address, chainId]);
 
+  useEffect(() => {
+    if (isWalletResolving || !isConnected || !address || chainId == null) return;
+
+    const id = window.setInterval(() => {
+      const hasActivePlan = useDashboardStore
+        .getState()
+        .plans.some(
+          (plan) => plan.status === "active",
+        );
+      if (hasActivePlan) {
+        void useDashboardStore
+          .getState()
+          .fetchDashboardData({ address, chainId, force: true });
+      }
+    }, 5_000);
+
+    return () => window.clearInterval(id);
+  }, [isWalletResolving, isConnected, address, chainId]);
+
   if (isWalletResolving) {
     return (
       <div className="flex h-screen flex-col overflow-hidden">

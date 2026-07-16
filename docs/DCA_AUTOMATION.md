@@ -17,6 +17,10 @@ DCA schedules are executed automatically by a **standalone backend executor** (n
    - Calls **GasTank.recordExecution(user, costUsdc6)** on the **best chain** (execution chain if enough balance there, else the chain where the user has the most balance) to deduct and reimburse the relayer in USDC.
 5. No Gelato or Vercel Cron; the relayer wallet must hold native gas token and be set as the GasTank **executor**.
 
+Set `SCHEDULER_API_URL` in the frontend deployment to the public backend URL. The dashboard proxies
+the backend `GET /api/plans/timing` endpoint so Auto DCA countdowns target the scheduler sweep that
+will execute the plan. Manual execution still becomes available at the exact on-chain due time.
+
 ## Contracts
 
 - **DCAVault**: unchanged; `executeSwap(user, scheduleId, swapData)` is called by anyone (the relayer).

@@ -33,8 +33,16 @@ interface PlanDetails {
   runsCount: number;
   executedCount: number;
   executionProgress: number;
+  contractDueTimestamp: number;
   nextExecutionTimestamp: number;
   estimatedCompletion: number | null;
+}
+
+interface BackendPlanTiming {
+  chainClockOffsetSeconds: number;
+  dueTimestamp: number;
+  ready: boolean;
+  executionMode: "auto" | "manual" | null;
 }
 
 /* ---------- formatting ---------------------------------------------------- */
@@ -92,13 +100,18 @@ const shortHash = (hash: string) =>
 
 /** One clock for the whole page, so the countdown, the interval bar and the
  *  ready-state can never disagree by a tick. */
-function useNow(active: boolean): number {
-  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+function useNow(active: boolean, clockOffsetSeconds = 0): number {
+  const [now, setNow] = useState(
+    () => Math.floor(Date.now() / 1000) + clockOffsetSeconds,
+  );
   useEffect(() => {
     if (!active) return;
-    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
+    const id = setInterval(
+      () => setNow(Math.floor(Date.now() / 1000) + clockOffsetSeconds),
+      1000,
+    );
     return () => clearInterval(id);
-  }, [active]);
+  }, [active, clockOffsetSeconds]);
   return now;
 }
 
@@ -261,6 +274,56 @@ export default function PlanPage() {
   } = usePlanExecutions(scheduleId, address, executedCount);
 
   const [logoUrlFallback, setLogoUrlFallback] = useState<string | null>(null);
+  const [backendPlanTiming, setBackendPlanTiming] =
+    useState<BackendPlanTiming | null>(null);
+
+  useEffect(() => {
+    if (!address || scheduleId == null) {
+      setBackendPlanTiming(null);
+      return;
+    }
+
+    let cancelled = false;
+    const loadTiming = async () => {
+      try {
+        const response = await fetch(
+          `/api/scheduler/dca-timing?user=${encodeURIComponent(address)}&chainId=${encodeURIComponent(chainId)}`,
+          { cache: "no-store" },
+        );
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          chainTime: number;
+          plans?: Array<{
+            scheduleId: string;
+            dueTimestamp: number;
+            ready: boolean;
+            executionMode: "auto" | "manual" | null;
+          }>;
+        };
+        const timing = data.plans?.find(
+          (item) => item.scheduleId === scheduleId.toString(),
+        );
+        if (!cancelled && timing) {
+          setBackendPlanTiming({
+            chainClockOffsetSeconds:
+              data.chainTime - Math.floor(Date.now() / 1000),
+            dueTimestamp: timing.dueTimestamp,
+            ready: timing.ready,
+            executionMode: timing.executionMode,
+          });
+        }
+      } catch {
+        // Fall back to the on-chain due timestamp when the backend is unavailable.
+      }
+    };
+
+    void loadTiming();
+    const id = window.setInterval(loadTiming, 5_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [address, chainId, scheduleId]);
 
   const explorerUrl = useMemo(
     () => wagmiConfig.chains.find((c) => c.id === chainId)?.blockExplorers?.default,
@@ -298,17 +361,20 @@ export default function PlanPage() {
     if (executedCount >= runsCount) status = "ended";
     else if (!schedule.active) status = "cancelled";
 
-    const nextExecutionTimestamp = Number(schedule.lastExecutionTime) + intervalSeconds;
+    const contractDueTimestamp =
+      backendPlanTiming?.dueTimestamp ??
+      Number(schedule.lastExecutionTime) + intervalSeconds;
+    const nextExecutionTimestamp = contractDueTimestamp;
     const runsLeft = Math.max(0, runsCount - executedCount);
     const estimatedCompletion =
       status === "active" && runsLeft > 0
         ? nextExecutionTimestamp + (runsLeft - 1) * intervalSeconds
         : null;
 
-    // At creation the contract backdates lastExecutionTime by one interval, so
-    // the first buy is immediately due. Unwind that to recover the start date.
+    // Creation stores its block timestamp. Later executions advance that same
+    // field, so count backwards by the completed intervals for the estimate.
     const createdAt =
-      Number(schedule.lastExecutionTime) - executedCount * intervalSeconds + intervalSeconds;
+      Number(schedule.lastExecutionTime) - executedCount * intervalSeconds;
 
     return {
       id: scheduleId.toString(),
@@ -326,15 +392,31 @@ export default function PlanPage() {
       runsCount,
       executedCount,
       executionProgress,
+      contractDueTimestamp,
       nextExecutionTimestamp,
       estimatedCompletion,
     };
-  }, [schedule, scheduleId, chainId, supportedTokens]);
+  }, [
+    schedule,
+    scheduleId,
+    chainId,
+    supportedTokens,
+    backendPlanTiming,
+  ]);
 
-  const now = useNow(plan?.status === "active");
-  const secondsUntilNext = plan ? Math.max(0, plan.nextExecutionTimestamp - now) : 0;
+  const backendChainClockOffsetSeconds =
+    backendPlanTiming?.chainClockOffsetSeconds ?? 0;
+  const chainNow = useNow(
+    plan?.status === "active",
+    backendChainClockOffsetSeconds,
+  );
+  const secondsUntilNext = plan
+    ? Math.max(0, plan.nextExecutionTimestamp - chainNow)
+    : 0;
   const isDue = plan?.status === "active" && secondsUntilNext === 0;
-  const inCooldown = plan?.status === "active" && secondsUntilNext > 0;
+  const isContractReady =
+    plan?.status === "active" &&
+    (backendPlanTiming?.ready === true || plan.contractDueTimestamp <= chainNow);
 
   // Fallback: fetch the logo from the API when the static helper has none (testnets).
   useEffect(() => {
@@ -544,16 +626,17 @@ export default function PlanPage() {
               <ExecuteSwapButton
                 userAddress={address}
                 scheduleId={scheduleId}
-                isReady={isDue}
+                isReady={isContractReady}
                 onSuccess={() => refetch?.()}
-                disabled={inCooldown}
+                disabled={!isContractReady}
+                executionMode={backendPlanTiming?.executionMode ?? null}
               />
               <span className="pl-actions-note">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
                 </svg>
                 {isEnrolledForAutoExecution
-                  ? "This plan runs itself — executing manually just runs it sooner."
+                  ? "This plan runs automatically when its on-chain countdown reaches zero."
                   : "Runs when you execute it, or enrol it for auto-execution."}
               </span>
               <CancelScheduleButton scheduleId={scheduleId} />
@@ -630,7 +713,7 @@ export default function PlanPage() {
             unavailable={historyUnavailable}
             partial={historyPartial}
             explorerBaseUrl={explorerUrl?.url}
-            now={now}
+            now={chainNow}
           />
         </div>
       </section>

@@ -29,7 +29,13 @@ function formatCountdown(secondsTotal: number): string {
   return parts.join(" ");
 }
 
-function NextDCACountdown({ targetTimestamp }: { targetTimestamp: number | null }) {
+function NextDCACountdown({
+  targetTimestamp,
+  clockOffsetSeconds,
+}: {
+  targetTimestamp: number | null;
+  clockOffsetSeconds: number;
+}) {
   const [display, setDisplay] = useState<string>("—");
 
   useEffect(() => {
@@ -38,14 +44,14 @@ function NextDCACountdown({ targetTimestamp }: { targetTimestamp: number | null 
       return;
     }
     const tick = () => {
-      const now = Math.floor(Date.now() / 1000);
+      const now = Math.floor(Date.now() / 1000) + clockOffsetSeconds;
       const remaining = Math.max(0, targetTimestamp - now);
       setDisplay(formatCountdown(remaining));
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [targetTimestamp]);
+  }, [targetTimestamp, clockOffsetSeconds]);
 
   return <span>{display}</span>;
 }
@@ -56,6 +62,7 @@ export function DashboardStats() {
     isLoadingBalance,
     totalDeposited,
     nextExecutionTime,
+    backendChainClockOffsetSeconds,
     activePlanCount,
     isLoadingStats,
   } = useDashboardStats();
@@ -134,7 +141,10 @@ export function DashboardStats() {
                 isLoadingStats ? (
                   <StatValueSkeleton />
                 ) : (
-                  <NextDCACountdown targetTimestamp={nextExecutionTime} />
+                  <NextDCACountdown
+                    targetTimestamp={nextExecutionTime}
+                    clockOffsetSeconds={backendChainClockOffsetSeconds}
+                  />
                 )
               ) : stat.value === null ? (
                 <StatValueSkeleton />

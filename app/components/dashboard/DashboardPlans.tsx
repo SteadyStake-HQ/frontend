@@ -45,21 +45,27 @@ function formatCountdownLong(secondsTotal: number): string {
   return parts.length > 0 ? parts.join(" ") : "Now";
 }
 
-function NextRunCountdown({ targetTimestamp }: { targetTimestamp: number }) {
+function NextRunCountdown({
+  targetTimestamp,
+  clockOffsetSeconds,
+}: {
+  targetTimestamp: number;
+  clockOffsetSeconds: number;
+}) {
   const [display, setDisplay] = useState(() => {
-    const now = Math.floor(Date.now() / 1000);
+    const now = Math.floor(Date.now() / 1000) + clockOffsetSeconds;
     return formatCountdownLong(Math.max(0, targetTimestamp - now));
   });
 
   useEffect(() => {
     const tick = () => {
-      const now = Math.floor(Date.now() / 1000);
+      const now = Math.floor(Date.now() / 1000) + clockOffsetSeconds;
       setDisplay(formatCountdownLong(Math.max(0, targetTimestamp - now)));
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [targetTimestamp]);
+  }, [targetTimestamp, clockOffsetSeconds]);
 
   return <span>{display}</span>;
 }
@@ -130,26 +136,33 @@ function SchedulePlanCard({
   cardIndex: number;
 }) {
   const theme = PLAN_CARD_THEMES[cardIndex % PLAN_CARD_THEMES.length];
-  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+  const backendChainClockOffsetSeconds = useDashboardStore(
+    (state) => state.backendChainClockOffsetSeconds,
+  );
+  const [now, setNow] = useState(
+    () => Math.floor(Date.now() / 1000) + backendChainClockOffsetSeconds,
+  );
 
   useEffect(() => {
     if (plan.status !== "active" || plan.nextExecutionTimestamp <= 0) return;
-    const update = () => setNow(Math.floor(Date.now() / 1000));
+    const update = () =>
+      setNow(Math.floor(Date.now() / 1000) + backendChainClockOffsetSeconds);
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
-  }, [plan.status, plan.nextExecutionTimestamp]);
+  }, [plan.status, plan.nextExecutionTimestamp, backendChainClockOffsetSeconds]);
 
-  const inCooldown = plan.status === "active" && plan.nextExecutionTimestamp > now;
   // The contract readiness value stored on the plan is only a snapshot from
   // the last dashboard fetch. Derive time-based readiness from the live clock
   // so this button changes at the same instant as the countdown and Execute All.
-  const isReady = plan.status === "active" && !inCooldown;
+  const isContractReady =
+    plan.status === "active" &&
+    (plan.isReady || plan.contractDueTimestamp <= now);
   const state: PlanVisualState =
     plan.status === "cancelled"
       ? "cancelled"
       : plan.status === "ended"
         ? "ended"
-        : isReady
+        : isContractReady
           ? "ready"
           : "active";
   const isDone = state === "ended" || state === "cancelled";
@@ -260,14 +273,21 @@ function SchedulePlanCard({
             </span>
 
             {plan.status === "active" && (
-              <span className={`pc-chip pc-chip-time ${inCooldown ? "" : "pc-chip-now"}`}>
+              <span
+                className={`pc-chip pc-chip-time ${
+                  !isContractReady ? "" : "pc-chip-now"
+                }`}
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 Next buy{" "}
                 <b>
-                  {inCooldown ? (
-                    <NextRunCountdown targetTimestamp={plan.nextExecutionTimestamp} />
+                  {!isContractReady ? (
+                    <NextRunCountdown
+                      targetTimestamp={plan.nextExecutionTimestamp}
+                      clockOffsetSeconds={backendChainClockOffsetSeconds}
+                    />
                   ) : (
                     "now"
                   )}
@@ -321,7 +341,9 @@ function SchedulePlanCard({
             )}
             <span className="pc-badge-state">
               <span className="pc-badge-dot" aria-hidden />
-              {STATE_LABEL[state]}
+              {plan.executionMode === "auto"
+                ? "Auto Executing..."
+                : STATE_LABEL[state]}
             </span>
           </div>
 
@@ -330,9 +352,10 @@ function SchedulePlanCard({
               <ExecuteSwapButton
                 userAddress={userAddress}
                 scheduleId={plan.scheduleId}
-                isReady={isReady}
+                isReady={isContractReady}
                 onSuccess={onExecuteSuccess}
-                disabled={isExecutingAll || inCooldown}
+                disabled={isExecutingAll || !isContractReady}
+                executionMode={plan.executionMode}
               />
             )}
             <Link
@@ -447,18 +470,35 @@ export function DashboardPlans({ onAddPlan }: DashboardPlansProps) {
   const scheduleCount = useDashboardStore((state) => state.scheduleCount);
   const isLoading = useDashboardStore((state) => state.isLoading);
   const isRefreshing = useDashboardStore((state) => state.isRefreshing);
+  const backendClockOffsetSeconds = useDashboardStore(
+    (state) => state.backendClockOffsetSeconds,
+  );
+  const backendChainClockOffsetSeconds = useDashboardStore(
+    (state) => state.backendChainClockOffsetSeconds,
+  );
 
   const [executingAll, setExecutingAll] = useState(false);
   const [showExecuteModal, setShowExecuteModal] = useState(false);
   const [executeModalItems, setExecuteModalItems] = useState<ExecuteAllModalItem[]>([]);
   const [executionTimeline, setExecutionTimeline] = useState<Record<string, ExecutionStepStatus>>({});
   const [executionErrors, setExecutionErrors] = useState<Record<string, string>>({});
-  const [currentTime, setCurrentTime] = useState(() => Math.floor(Date.now() / 1000));
+  const [currentTime, setCurrentTime] = useState(
+    () => Math.floor(Date.now() / 1000) + backendClockOffsetSeconds,
+  );
 
   useEffect(() => {
-    const id = setInterval(() => setCurrentTime(Math.floor(Date.now() / 1000)), 1000);
+    const id = setInterval(
+      () =>
+        setCurrentTime(
+          Math.floor(Date.now() / 1000) + backendClockOffsetSeconds,
+        ),
+      1000,
+    );
     return () => clearInterval(id);
-  }, []);
+  }, [backendClockOffsetSeconds]);
+
+  const contractCurrentTime =
+    currentTime + backendChainClockOffsetSeconds - backendClockOffsetSeconds;
 
   const refreshData = useCallback(async () => {
     await useDashboardStore.getState().fetchDashboardData({ address, chainId, force: true });
@@ -469,10 +509,12 @@ export function DashboardPlans({ onAddPlan }: DashboardPlansProps) {
       plans.filter(
         (plan) =>
           plan.status === "active" &&
-          plan.nextExecutionTimestamp > 0 &&
-          plan.nextExecutionTimestamp <= currentTime,
+          plan.executionMode == null &&
+          (plan.isReady ||
+            (plan.contractDueTimestamp > 0 &&
+              plan.contractDueTimestamp <= contractCurrentTime)),
       ),
-    [plans, currentTime],
+    [plans, contractCurrentTime],
   );
 
   const handleExecuteSuccess = useCallback(() => {
