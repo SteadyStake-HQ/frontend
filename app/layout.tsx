@@ -77,11 +77,14 @@ export const metadata: Metadata = {
     template: "%s | SteadyStake",
   },
   description:
-    "SteadyStake: multi-chain non-custodial DCA. Set a plan, fund DCA + Gas Tank, we execute on schedule. Live on BNB Chain, Base, Polygon, Kava. Prepaid gas, your keys. steadystake.org",
+    "SteadyStake: multi-chain non-custodial DCA, powered by BOT Chain. Set a plan, fund DCA + Gas Tank, we execute on schedule. Live on BOT Chain, BNB Chain, Base, Polygon, Kava. Prepaid gas, your keys. steadystake.org",
   keywords: [
     "SteadyStake",
     "steadystake",
     "steadystake.org",
+    "BOT Chain",
+    "BOT Chain DCA",
+    "botchain",
     "DCA",
     "crypto savings",
     "multi-chain",
@@ -105,7 +108,7 @@ export const metadata: Metadata = {
     siteName: "SteadyStake",
     title: "SteadyStake – Non-Custodial DCA Across Chains",
     description:
-      "Multi-chain non-custodial DCA. Fund your plan + Gas Tank, we execute on schedule. BNB Chain, Base, Polygon, Kava. steadystake.org",
+      "Multi-chain non-custodial DCA, powered by BOT Chain. Fund your plan + Gas Tank, we execute on schedule. BOT Chain, BNB Chain, Base, Polygon, Kava. steadystake.org",
     images: [
       {
         url: "/Logo.jpeg",
@@ -119,7 +122,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "SteadyStake – Non-Custodial DCA Across Chains",
     description:
-      "Multi-chain non-custodial DCA. Fund DCA + Gas Tank, we execute on schedule. BNB Chain, Base, Polygon, Kava. steadystake.org",
+      "Multi-chain non-custodial DCA, powered by BOT Chain. Fund DCA + Gas Tank, we execute on schedule. BOT Chain, BNB Chain, Base, Polygon, Kava. steadystake.org",
     images: ["/Logo.jpeg"],
   },
   robots: {

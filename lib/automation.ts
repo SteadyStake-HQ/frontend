@@ -8,7 +8,7 @@ import { encodeFunctionData } from "viem";
 import { DCA_VAULT_ABI } from "@/config/abis";
 import deployedAddresses from "@/config/deployed-addresses.json";
 
-/** USDC address per chain (6 decimals). */
+/** Settlement stablecoin per chain (6 decimals). BOT Chain has no USDC — bridged USDT fills the slot. */
 const USDC_BY_CHAIN: Record<number, string> = {
   8453: "0x833589fCD6eDb6E08f4C7C32D4f71b54bdA02913",
   84532: "0x74C0cdB54B5bEB5fCf1073B8f1f6c583381c44D6",
@@ -16,6 +16,8 @@ const USDC_BY_CHAIN: Record<number, string> = {
   56: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
   137: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
   2222: "0xfA9343C3897324496A05fC75abeD6bAC29f8A40f",
+  677: "0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C", // BOT Chain: bridged USDT
+  968: "0x75edC9335175Fc0552D51D48439F229c10420fe3", // BOT Chain testnet: USDT
 };
 
 /** 0x API base. */

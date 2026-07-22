@@ -181,6 +181,8 @@ export function useGasTankAllChains(): {
   const b56 = useGasTankBalanceForChain(56);
   const b137 = useGasTankBalanceForChain(137);
   const b2222 = useGasTankBalanceForChain(2222);
+  const b677 = useGasTankBalanceForChain(677);
+  const b968 = useGasTankBalanceForChain(968);
   const byChain: Record<number, bigint> = {
     84532: b84532,
     8453: b8453,
@@ -188,8 +190,10 @@ export function useGasTankAllChains(): {
     56: b56,
     137: b137,
     2222: b2222,
+    677: b677,
+    968: b968,
   };
-  const totalBalanceUsdc6 = b84532 + b8453 + b11155111 + b56 + b137 + b2222;
+  const totalBalanceUsdc6 = b84532 + b8453 + b11155111 + b56 + b137 + b2222 + b677 + b968;
   return {
     totalBalanceUsdc6,
     byChain,

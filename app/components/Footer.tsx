@@ -59,11 +59,13 @@ const ICONS: Record<(typeof SOCIAL)[number]["label"], ReactNode> = {
   ),
 };
 
+/** BOT Chain leads — `lead` gives it the partner treatment in .ft-chains. */
 const CHAINS = [
-  { label: "BNB Chain", dot: "#f0b90b" },
-  { label: "Base", dot: "#0052ff" },
-  { label: "Polygon", dot: "#8247e5" },
-  { label: "Kava", dot: "#ff433e" },
+  { label: "BOT Chain", dot: "#10a37f", lead: true },
+  { label: "BNB Chain", dot: "#f0b90b", lead: false },
+  { label: "Base", dot: "#0052ff", lead: false },
+  { label: "Polygon", dot: "#8247e5", lead: false },
+  { label: "Kava", dot: "#ff433e", lead: false },
 ] as const;
 
 type FooterLink = { label: string; href: string; external?: boolean };
@@ -149,7 +151,7 @@ export function Footer() {
     "@type": "Organization",
     name: "SteadyStake",
     description:
-      "Multi-chain non-custodial DCA. Set a plan, fund DCA + Gas Tank, we execute on schedule. BNB Chain, Base, Polygon, Kava.",
+      "Multi-chain non-custodial DCA, powered by BOT Chain. Set a plan, fund DCA + Gas Tank, we execute on schedule. BOT Chain, BNB Chain, Base, Polygon, Kava.",
     url: "https://steadystake.org",
     logo: "https://steadystake.org/logo.png",
     sameAs: [
@@ -233,20 +235,21 @@ export function Footer() {
                 </span>
               </Link>
               <p className="ft-tagline">
-                Non-custodial DCA across BNB Chain, Base, Polygon &amp; Kava.
-                Set a plan. Fund DCA + Gas Tank. We execute on schedule.
+                Non-custodial DCA, powered by BOT Chain — and live on BNB Chain,
+                Base, Polygon &amp; Kava. Set a plan. Fund DCA + Gas Tank. We
+                execute on schedule.
               </p>
 
               <span className="ft-status">
                 <span className="ft-status-dot" />
-                Executor live · 4 chains
+                Executor live · 5 chains
               </span>
 
               <ul className="ft-chains">
                 {CHAINS.map((c) => (
                   <li
                     key={c.label}
-                    className="ft-chain"
+                    className={`ft-chain${c.lead ? " ft-chain-lead" : ""}`}
                     style={{ "--ft-dot": c.dot } as CSSProperties}
                   >
                     <span className="ft-chain-dot" />

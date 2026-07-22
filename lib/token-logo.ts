@@ -10,6 +10,7 @@ const TRUST_CHAIN_SLUG: Partial<Record<number, string>> = {
   56: "smartchain",
   137: "polygon",
   2222: "kavaevm",
+  // Trust Wallet has no BOT Chain assets repo; 677/968 fall through to no logo.
 };
 
 /** Moralis CDN host – use proxy so we can use their logo URLs permanently. */

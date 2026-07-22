@@ -13,7 +13,17 @@ import {
 export const runtime = "nodejs";
 
 /** Chain IDs that are testnets (use GELATO_RELAY_API_KEY_TESTNET when set). */
-const TESTNET_CHAIN_IDS = new Set([84532, 11155111]); // Base Sepolia, Ethereum Sepolia
+const TESTNET_CHAIN_IDS = new Set([84532, 11155111, 968]); // Base Sepolia, Ethereum Sepolia, BOT Chain Testnet
+
+/**
+ * Chains whose vault swapRouter is a direct DEX adapter, not a 0x aggregator: send empty
+ * swapData so DCAVault takes the ISwapRouter.swap path (BOT Chain uses UniV2SwapAdapter
+ * over BDEX V2; the Sepolia testnets use MockSwapRouter).
+ *
+ * Note: Gelato Relay does not support BOT Chain, so 677/968 execute through the standalone
+ * backend relayer (backend/src/run-executor.ts), not this Vercel cron route.
+ */
+const DIRECT_SWAP_ROUTER_CHAINS = new Set([84532, 11155111, 677, 968]);
 
 function getAllowedChainIds(): Set<number> | null {
   const raw = process.env.AUTOMATION_CHAIN_IDS?.trim();
@@ -40,6 +50,8 @@ const CHAIN_RPC: Record<number, string> = {
   56: process.env.RPC_URL_56 ?? "https://bsc-dataseed.binance.org",
   137: process.env.RPC_URL_137 ?? "https://polygon-rpc.com",
   2222: process.env.RPC_URL_2222 ?? "https://evm.kava.io",
+  677: process.env.RPC_URL_677 ?? "https://rpc.botchain.ai",
+  968: process.env.RPC_URL_968 ?? "https://rpc.bohr.life",
 };
 
 const kavaChain: Chain = {
@@ -49,6 +61,23 @@ const kavaChain: Chain = {
   rpcUrls: { default: { http: [CHAIN_RPC[2222]!] } },
 };
 
+const botChain: Chain = {
+  id: 677,
+  name: "BOT Chain",
+  nativeCurrency: { decimals: 18, name: "BOT", symbol: "BOT" },
+  rpcUrls: { default: { http: [CHAIN_RPC[677]!] } },
+  contracts: { multicall3: { address: "0x47FA21f684bBAD707A53a0f9BE59F1422F46C265" } },
+};
+
+const botTestnet: Chain = {
+  id: 968,
+  name: "BOT Chain Testnet",
+  nativeCurrency: { decimals: 18, name: "BOT", symbol: "tBOT" },
+  rpcUrls: { default: { http: [CHAIN_RPC[968]!] } },
+  contracts: { multicall3: { address: "0x47FA21f684bBAD707A53a0f9BE59F1422F46C265" } },
+  testnet: true,
+};
+
 function getChain(chainId: number): Chain | undefined {
   if (chainId === 8453) return base;
   if (chainId === 84532) return baseSepolia;
@@ -56,6 +85,8 @@ function getChain(chainId: number): Chain | undefined {
   if (chainId === 56) return bsc;
   if (chainId === 137) return polygon;
   if (chainId === 2222) return kavaChain;
+  if (chainId === 677) return botChain;
+  if (chainId === 968) return botTestnet;
   return undefined;
 }
 
@@ -220,20 +251,26 @@ export async function GET(request: NextRequest) {
       }
 
       const netAmount = netAmountAfterFee(amountPerInterval, feeBps);
-      const quote = await get0xQuote(
-        chainId,
-        vaultInfo.usdc,
-        targetToken,
-        netAmount.toString(),
-        zeroExKey,
-        1,
-      );
-      if (!quote?.data) {
-        errors.push(`0x quote failed ${member} ${scheduleId}`);
-        continue;
+      let swapData: `0x${string}`;
+      if (DIRECT_SWAP_ROUTER_CHAINS.has(chainId)) {
+        swapData = "0x";
+      } else {
+        const quote = await get0xQuote(
+          chainId,
+          vaultInfo.usdc,
+          targetToken,
+          netAmount.toString(),
+          zeroExKey,
+          1,
+        );
+        if (!quote?.data) {
+          errors.push(`0x quote failed ${member} ${scheduleId}`);
+          continue;
+        }
+        swapData = quote.data as `0x${string}`;
       }
 
-      const calldata = buildExecuteSwapCalldata(user, scheduleId, quote.data);
+      const calldata = buildExecuteSwapCalldata(user, scheduleId, swapData);
       const taskId = await relayExecuteSwap(
         chainId,
         vaultInfo.vault,

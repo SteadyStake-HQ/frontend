@@ -14,6 +14,8 @@ import { HeroVisual } from "./HeroVisual";
 import { useHeroStats } from "@/app/hooks/useHeroStats";
 
 const AMBIENT_MOTE_COUNT = 14;
+/** BOT Chain is the partner network — it is named in the badge, the rest are icons only. */
+const HERO_LEAD_CHAIN = { name: "BOT Chain", iconUrl: "/bot.svg" } as const;
 const HERO_CHAINS = [
   { name: "BNB Chain", iconUrl: "/bsc.svg" },
   { name: "Base", iconUrl: "/base.svg" },
@@ -184,6 +186,7 @@ export default function HeroSection() {
   return (
     <section
       ref={heroRef}
+      id="home"
       className="hero-bg-root relative min-h-screen overflow-hidden bg-[var(--background)]"
     >
       <div className="hero-bg-layer" aria-hidden="true">
@@ -228,6 +231,21 @@ export default function HeroSection() {
               <strong className="font-semibold text-[var(--foreground)]">
                 Live on
               </strong>
+              <span className="hero-badge-lead" title={HERO_LEAD_CHAIN.name}>
+                <span className="hero-badge-chain hero-badge-chain-lead">
+                  <img
+                    src={HERO_LEAD_CHAIN.iconUrl}
+                    alt={HERO_LEAD_CHAIN.name}
+                    className="h-full w-full object-contain"
+                    width={24}
+                    height={24}
+                  />
+                </span>
+                <span className="hero-badge-lead-name">{HERO_LEAD_CHAIN.name}</span>
+              </span>
+              <span className="hero-badge-plus" aria-hidden>
+                +
+              </span>
               <span className="flex items-center gap-1.5">
                 {HERO_CHAINS.map((chain) => (
                   <span key={chain.name} title={chain.name} className="hero-badge-chain">
@@ -257,8 +275,9 @@ export default function HeroSection() {
 
           <p className="hero-animate-slide hero-delay-300 mb-9 max-w-xl text-lg font-normal leading-relaxed text-[var(--hero-muted)] md:text-xl">
             Set one plan and SteadyStake keeps building your position with calm,
-            scheduled buys — across four chains, with your keys never leaving your
-            hands.
+            scheduled buys — led by our partner{" "}
+            <strong className="hero-bot-inline">BOT Chain</strong> and live across
+            five networks, with your keys never leaving your hands.
           </p>
 
           <div className="hero-animate-scale hero-delay-400 flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row lg:items-start">

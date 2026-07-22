@@ -8,6 +8,7 @@ import { Economics } from "./components/Economics";
 import { Roadmap } from "./components/Roadmap";
 import { Vision } from "./components/Vision";
 import { Footer } from "./components/Footer";
+import { SectionRail } from "./components/SectionRail";
 
 const SITE_URL = "https://steadystake.org";
 
@@ -19,6 +20,7 @@ export default function Home() {
   return (
     <>
       <Header />
+      <SectionRail />
       <main>
         <HeroSection />
         <div className="landing-pattern-bg">

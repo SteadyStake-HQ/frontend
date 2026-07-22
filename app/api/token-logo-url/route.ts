@@ -9,6 +9,8 @@ const COINGECKO_PLATFORM: Partial<Record<number, string>> = {
   56: "binance-smart-chain",
   137: "polygon-pos",
   2222: "kava",
+  677: "bot-chain",
+  968: "bot-chain", // testnet tokens are not listed; falls back to null
 };
 
 /** Moralis chain param for metadata API. */

@@ -65,7 +65,7 @@ interface DashboardStoreState {
   resetDashboardData: () => void;
 }
 
-type DashboardChainId = 56 | 137 | 2222 | 8453 | 84532 | 11155111;
+type DashboardChainId = 56 | 137 | 677 | 968 | 2222 | 8453 | 84532 | 11155111;
 
 function formatNextRun(targetTimestamp: number, now: number): string {
   const secondsUntilNext = Math.max(0, targetTimestamp - now);
@@ -107,22 +107,28 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
       return;
     }
 
+    const walletKey = `${address.toLowerCase()}-${chainId}`;
     const contracts = getContracts(chainId);
     if (!contracts) {
-      set({ ...EMPTY_STATE, error: "Unsupported network" });
+      set({ ...EMPTY_STATE, walletKey, error: "Unsupported network" });
       return;
     }
     const supportedChainId = chainId as DashboardChainId;
 
-    const walletKey = `${address.toLowerCase()}-${chainId}`;
     const state = get();
     if (!force && state.walletKey === walletKey && state.isRefreshing) return;
 
+    // A different wallet or network means everything on screen belongs to
+    // somewhere else: drop it now rather than leaving it up until (or, on
+    // failure, long after) the new data arrives.
+    const isContextChange = state.walletKey !== walletKey;
+
     set((prev) => ({
-      ...prev,
+      ...(isContextChange ? EMPTY_STATE : prev),
       walletKey,
-      isLoading: prev.lastFetchedAt == null || prev.walletKey !== walletKey,
+      isLoading: isContextChange || prev.lastFetchedAt == null,
       isRefreshing: true,
+      lastFetchedAt: isContextChange ? null : prev.lastFetchedAt,
       error: null,
     }));
 
@@ -232,6 +238,10 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
         planContracts.length > 0
           ? await multicall(config, {
               allowFailure: true,
+              // multicall takes chainId at the top level — the per-contract
+              // chainId below is ignored, so without this the plan reads go to
+              // whatever chain wagmi is currently on instead of the requested one.
+              chainId: supportedChainId,
               contracts: planContracts,
             })
           : [];
@@ -384,6 +394,11 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
         historyPoints = [];
       }
 
+      // The user may have switched wallet or network while this was in flight.
+      // Writing now would put the old network's numbers back on screen, so drop
+      // the response — the fetch for the current context is already running.
+      if (get().walletKey !== walletKey) return;
+
       set({
         walletKey,
         usdcBalance: usdcBalanceResult?.formatted
@@ -427,6 +442,7 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
         error: null,
       });
     } catch (error) {
+      if (get().walletKey !== walletKey) return;
       set((prev) => ({
         ...prev,
         isLoading: false,

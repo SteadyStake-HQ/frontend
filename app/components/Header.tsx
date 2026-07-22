@@ -10,15 +10,6 @@ import { CHAIN_ICON_URLS } from "@/config/wagmi";
 import { CustomConnectButton } from "./CustomConnectButton";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
-const NAV = [
-  { label: "Home", href: "/" },
-  { label: "Problem", href: "#problem" },
-  { label: "Networks", href: "#networks" },
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Economics", href: "#economics" },
-  { label: "Roadmap", href: "#roadmap" },
-] as const;
-
 function NetworkIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -151,9 +142,8 @@ export function Header() {
       } ${isDashboard ? "min-h-[5.5rem]" : "min-h-[4.5rem]"}`}
     >
       <div
-        className={`mx-auto flex w-full max-w-7xl flex-1 justify-between gap-2 px-4 ${isDashboard ? "py-3" : "py-2"}`}
+        className={`mx-auto flex w-full max-w-7xl flex-1 items-center justify-between gap-3 px-4 ${isDashboard ? "py-3" : "py-2"}`}
       >
-        <div className="flex items-center gap-2 md:gap-4">
           <Link
             href="/"
             className="hd-brand"
@@ -178,28 +168,7 @@ export function Header() {
               <span className="hd-brand-tagline">Automated crypto savings</span>
             </span>
           </Link>
-          {!isDashboard && (
-            <nav
-              className="hidden items-center gap-1 md:flex"
-              aria-label="Main"
-            >
-              {NAV.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`rounded-lg px-2.5 py-1.5 text-sm font-semibold transition-colors ${
-                    headerTransparent
-                      ? "text-[var(--foreground)]/92 hover:bg-[var(--hero-muted)]/12 hover:text-[var(--foreground)]"
-                      : "text-[var(--foreground)]/90 hover:bg-[var(--hero-muted)]/10 hover:text-[var(--foreground)]"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <ThemeSwitcher />
           {mounted && isConnected && (
             <SwitchNetworkButton large={isDashboard} />

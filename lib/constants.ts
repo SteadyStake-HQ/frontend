@@ -9,6 +9,8 @@ export const CHAIN_NAMES: Record<number, string> = {
   56: "BNB Chain",
   137: "Polygon",
   2222: "Kava",
+  677: "BOT Chain",
+  968: "BOT Chain Testnet",
 };
 
 export const FREQUENCY_MAP: Record<number, string> = {

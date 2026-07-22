@@ -391,7 +391,13 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
   };
 
   const TOKEN_LIST_LIMIT = 100;
-  const customTokens = (chainId != null ? customTokensByChain[chainId] ?? [] : []) as TokenOption[];
+  // The plan spends this token on every run, so it can never also be the token being bought.
+  const settlementTokenAddress = (contracts.MockUSDC as string | undefined)?.toLowerCase();
+  const isSettlementToken = (address: string) =>
+    settlementTokenAddress != null && address.toLowerCase() === settlementTokenAddress;
+  const customTokens = (chainId != null ? customTokensByChain[chainId] ?? [] : []).filter(
+    (t) => !isSettlementToken(t.address),
+  ) as TokenOption[];
   const customMapped = customTokens.map((t) => ({
     ...t,
     logo: getTokenLogoUrl(chainId ?? 0, t.address, t.logo) ?? t.logo,
@@ -399,7 +405,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
   }));
   const customAddresses = new Set(customTokens.map((t) => t.address.toLowerCase()));
   const listMapped = tokensList
-    .filter((t) => !customAddresses.has(t.address.toLowerCase()))
+    .filter((t) => !customAddresses.has(t.address.toLowerCase()) && !isSettlementToken(t.address))
     .map((t) => ({
       ...t,
       address: t.address as `0x${string}`,
@@ -652,6 +658,10 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
     if (!raw) return;
     if (!isAddress(raw)) {
       setAddTokenError("Please enter a valid contract address.");
+      return;
+    }
+    if (isSettlementToken(raw)) {
+      setAddTokenError("That is the token your plan spends — pick a different token to buy.");
       return;
     }
     setAddingAddress(getAddress(raw));

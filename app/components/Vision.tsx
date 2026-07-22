@@ -50,7 +50,7 @@ const STAGES = [
     step: "01",
     label: "Today",
     status: "Live now",
-    text: "Non-custodial DCA, executing on 4 chains.",
+    text: "Non-custodial DCA, executing on 5 chains—led by BOT Chain.",
   },
   {
     key: "next",

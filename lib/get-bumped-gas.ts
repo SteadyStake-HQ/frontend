@@ -9,6 +9,8 @@ const RPC_BY_CHAIN: Record<number, string> = {
   56: "https://bsc-dataseed.binance.org",
   137: "https://polygon-rpc.com",
   2222: "https://evm.kava.io",
+  677: "https://rpc.botchain.ai",
+  968: "https://rpc.bohr.life",
 };
 
 const BUMP_PERCENT = 120n; // 20% bump

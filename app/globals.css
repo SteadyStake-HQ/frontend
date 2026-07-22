@@ -394,12 +394,6 @@ a[href] {
   }
 }
 
-@media (max-width: 1150px) and (min-width: 768px) {
-  .hd-brand-tagline {
-    display: none;
-  }
-}
-
 @media (max-width: 639px) {
   .hd-brand {
     gap: 0.35rem;
@@ -442,6 +436,182 @@ a[href] {
   .hd-brand-steady,
   .hd-brand-stake {
     animation: none !important;
+  }
+}
+
+/* ============================================================
+   Section rail
+   Vertical section nav pinned to the middle of the right edge.
+   It replaces the horizontal header nav, which could not share
+   the top row with the brand lockup and the wallet cluster.
+
+   Resting state is a column of dots with a gradient progress bead
+   that slides between them; labels slide in from the right on
+   hover so the rail stays quiet until you reach for it.
+   ============================================================ */
+.ss-rail {
+  position: fixed;
+  top: 50%;
+  right: max(1.25rem, env(safe-area-inset-right));
+  z-index: 40;
+  display: none;
+  align-items: stretch;
+  gap: 0.85rem;
+  transform: translateY(-50%) translateX(1.5rem);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 500ms ease, transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (min-width: 1024px) {
+  .ss-rail {
+    display: flex;
+  }
+}
+
+.ss-rail.is-revealed {
+  transform: translateY(-50%) translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Hairline the progress bead rides along. Sits outboard of the dots. */
+.ss-rail-track {
+  position: relative;
+  order: 2;
+  width: 2px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--hero-muted) 22%, transparent);
+}
+
+.ss-rail-progress {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: calc(100% / 6);
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--hero-accent), var(--hero-secondary));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--hero-secondary) 55%, transparent);
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* No gap: the bead divides the track into exactly one slice per item. */
+.ss-rail-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ss-rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding: 0.42rem 0.15rem;
+  color: color-mix(in srgb, var(--hero-muted) 80%, var(--foreground));
+}
+
+.ss-rail-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 0.32rem 0.6rem;
+  background: color-mix(in srgb, var(--background) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hero-muted) 18%, transparent);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transform: translateX(0.5rem) scale(0.94);
+  transition: opacity 260ms ease, transform 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 260ms ease;
+}
+
+.ss-rail-item:hover .ss-rail-label,
+.ss-rail-item:focus-visible .ss-rail-label {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  color: var(--foreground);
+}
+
+.ss-rail-dot {
+  position: relative;
+  display: grid;
+  width: 0.6rem;
+  height: 0.6rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--hero-muted) 45%, transparent);
+  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 300ms ease, box-shadow 300ms ease;
+}
+
+.ss-rail-item:hover .ss-rail-dot {
+  transform: scale(1.35);
+  background: color-mix(in srgb, var(--hero-accent) 70%, transparent);
+}
+
+.ss-rail-item.is-active .ss-rail-dot {
+  background: linear-gradient(140deg, var(--hero-accent), var(--hero-secondary));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--hero-secondary) 60%, transparent);
+  transform: scale(1.25);
+}
+
+/* Radar ping, active dot only. */
+.ss-rail-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.ss-rail-item.is-active .ss-rail-pulse {
+  border: 1px solid color-mix(in srgb, var(--hero-accent) 65%, transparent);
+  animation: ss-rail-ping 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+/* Keep the active label legible without a hover. */
+.ss-rail-item.is-active .ss-rail-label {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  color: var(--foreground);
+}
+
+.ss-rail-item:focus-visible {
+  outline: 2px solid var(--hero-accent);
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+@keyframes ss-rail-ping {
+  0% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-rail,
+  .ss-rail-progress,
+  .ss-rail-label,
+  .ss-rail-dot {
+    transition: none;
+  }
+
+  .ss-rail-item.is-active .ss-rail-pulse {
+    animation: none;
   }
 }
 
@@ -588,6 +758,12 @@ a[href] {
 .plan-card-rose {
   --card-accent: #e11d48;
 }
+/* BOT Chain's own green, quoted from /bot.svg — the partner network keeps its
+   brand color rather than being re-tinted into the pastel set above. */
+.landing-card-bot,
+.plan-card-bot {
+  --card-accent: #10a37f;
+}
 
 /* Dark mode lifts each accent so it reads as emitted light, not paint */
 .dark .landing-card-mint,
@@ -609,6 +785,10 @@ a[href] {
 .dark .landing-card-rose,
 .dark .plan-card-rose {
   --card-accent: #fb7185;
+}
+.dark .landing-card-bot,
+.dark .plan-card-bot {
+  --card-accent: #14c79a;
 }
 
 /* --- Shared parts that live inside a card --- */
@@ -715,6 +895,215 @@ a[href] {
   to {
     transform: scale(2.6);
     opacity: 0;
+  }
+}
+
+/* --- Lead network card (BOT Chain, WhyBase) ---
+   The partner network is not a fifth tile in the grid: it sits above it, wider
+   and brighter, so the hierarchy carries the branding on its own. */
+.nw-lead {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.6rem;
+  padding: 2rem;
+  border-color: color-mix(in srgb, var(--card-accent) 38%, var(--card-border));
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--card-accent) 20%, transparent), transparent 46%),
+    linear-gradient(112deg, var(--card-bg), color-mix(in srgb, var(--card-bg-2) 86%, var(--card-accent)));
+  box-shadow:
+    inset 0 1px 0 var(--card-hi),
+    0 24px 60px -32px color-mix(in srgb, var(--card-accent) 70%, transparent),
+    var(--card-shadow);
+}
+
+.nw-lead:hover {
+  border-color: color-mix(in srgb, var(--card-accent) 62%, var(--card-border));
+  box-shadow:
+    inset 0 1px 0 var(--card-hi),
+    0 32px 78px -30px color-mix(in srgb, var(--card-accent) 82%, transparent),
+    var(--card-shadow-hover);
+}
+
+.nw-lead-visual {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* A soft bloom behind the mark, so the logo reads as the source of the card's light */
+.nw-lead-glow {
+  position: absolute;
+  top: -6rem;
+  left: -4rem;
+  width: 20rem;
+  height: 20rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--card-accent) 26%, transparent), transparent 68%);
+  filter: blur(6px);
+}
+
+.nw-lead-ring {
+  position: absolute;
+  top: 50%;
+  left: 2.2rem;
+  width: 13rem;
+  height: 13rem;
+  margin-top: -6.5rem;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 34%, transparent);
+  border-radius: 50%;
+}
+
+.reveal-visible .nw-lead-ring {
+  animation: nw-lead-pulse 4.5s ease-in-out infinite;
+}
+
+@keyframes nw-lead-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.9;
+  }
+}
+
+/* Icon well: a dark bed, because the BOT mark is a saturated green on transparent */
+.nw-lead-mark {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  height: 5.25rem;
+  width: 5.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1.35rem;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 42%, transparent);
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--card-accent) 22%, transparent),
+    color-mix(in srgb, var(--card-accent) 6%, transparent)
+  );
+  box-shadow:
+    inset 0 1px 0 var(--card-hi),
+    0 16px 34px -20px color-mix(in srgb, var(--card-accent) 80%, transparent);
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.nw-lead:hover .nw-lead-mark {
+  transform: translateY(-3px) scale(1.05);
+}
+
+.nw-lead-copy {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.nw-lead-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 34%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card-accent) 12%, transparent);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--card-accent);
+}
+
+.nw-lead-name {
+  font-size: clamp(1.45rem, 2.6vw, 1.95rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--foreground);
+}
+
+.nw-lead-blurb {
+  margin-top: 0.6rem;
+  max-width: 40rem;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: color-mix(in srgb, var(--hero-muted) 82%, var(--foreground));
+}
+
+.nw-lead-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.nw-lead-fact {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 24%, transparent);
+  background: color-mix(in srgb, var(--card-accent) 8%, transparent);
+  padding: 0.28rem 0.7rem;
+  font-size: 0.72rem;
+}
+
+.nw-lead-fact strong {
+  font-weight: 800;
+  color: var(--card-accent);
+}
+
+.nw-lead-fact span {
+  color: var(--hero-muted);
+}
+
+.nw-lead-cta {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+}
+
+/* BOT Chain named in body copy — tinted, never just bold */
+.nw-lead-inline,
+.hero-bot-inline {
+  font-weight: 700;
+  color: #10a37f;
+}
+.dark .nw-lead-inline,
+.dark .hero-bot-inline {
+  color: #14c79a;
+}
+
+@media (max-width: 767px) {
+  .nw-lead {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+    gap: 1.2rem;
+    padding: 1.5rem;
+  }
+
+  .nw-lead-mark {
+    height: 4.25rem;
+    width: 4.25rem;
+  }
+
+  .nw-lead-cta {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nw-lead-ring {
+    animation: none !important;
   }
 }
 
@@ -4230,6 +4619,52 @@ a[href] {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--hero-primary) 45%, transparent);
 }
 
+/* --- BOT Chain lead slot in the hero badge ---
+   The partner network is the only one spelled out; the others stay icon-only. */
+.hero-badge-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, #10a37f 45%, transparent);
+  background: color-mix(in srgb, #10a37f 14%, transparent);
+  padding: 0.15rem 0.6rem 0.15rem 0.15rem;
+  box-shadow: 0 6px 18px -10px #10a37f;
+}
+
+.hero-badge-chain-lead {
+  height: 1.75rem;
+  width: 1.75rem;
+  background: #062a22;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #10a37f 55%, transparent);
+}
+
+.hero-badge-lead-name {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  color: #0b7f63;
+}
+.dark .hero-badge-lead-name {
+  color: #5eead4;
+}
+
+.hero-badge-plus {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--hero-muted);
+}
+
+@media (max-width: 400px) {
+  .hero-badge-lead-name {
+    display: none;
+  }
+  .hero-badge-lead {
+    padding: 0.15rem;
+  }
+}
+
 /* --- Headline --- */
 .hero-headline {
   font-size: clamp(1.35rem, 2.4vw, 2rem);
@@ -7216,6 +7651,18 @@ a[href] {
   color: var(--foreground);
   border-color: color-mix(in srgb, var(--ft-dot) 55%, transparent);
   box-shadow: 0 8px 20px -12px var(--ft-dot);
+}
+
+/* Partner network: filled rather than outlined, so it reads first in the row */
+.ft-chain-lead {
+  border-color: color-mix(in srgb, var(--ft-dot) 55%, transparent);
+  background: color-mix(in srgb, var(--ft-dot) 14%, transparent);
+  font-weight: 800;
+  color: color-mix(in srgb, var(--ft-dot) 78%, var(--foreground));
+}
+
+.ft-chain-lead:hover {
+  box-shadow: 0 10px 24px -12px var(--ft-dot);
 }
 
 .ft-chain-dot {

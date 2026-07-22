@@ -24,8 +24,61 @@ export const kava = defineChain({
   },
 });
 
+/**
+ * BOT Chain mainnet (chain 677). EVM, Parlia consensus (BSC-derived), ~0.75s blocks.
+ * Docs: https://dev-docs.botchain.ai/docs/Developers/json-rpc-endpoint/
+ */
+export const botChain = defineChain({
+  id: 677,
+  name: "BOT Chain",
+  nativeCurrency: { decimals: 18, name: "BOT", symbol: "BOT" },
+  rpcUrls: {
+    default: { http: ["https://rpc.botchain.ai"] },
+  },
+  blockExplorers: {
+    default: { name: "BOTScan", url: "https://scan.botchain.ai" },
+  },
+  contracts: {
+    multicall3: { address: "0x47FA21f684bBAD707A53a0f9BE59F1422F46C265" },
+  },
+});
+
+/** BOT Chain testnet (chain 968). Faucet: https://faucet.botchain.ai/basic */
+export const botTestnet = defineChain({
+  id: 968,
+  name: "BOT Chain Testnet",
+  nativeCurrency: { decimals: 18, name: "BOT", symbol: "tBOT" },
+  rpcUrls: {
+    default: { http: ["https://rpc.bohr.life"] },
+  },
+  blockExplorers: {
+    default: { name: "BOTScan", url: "https://scan.bohr.life" },
+  },
+  contracts: {
+    multicall3: { address: "0x47FA21f684bBAD707A53a0f9BE59F1422F46C265" },
+  },
+  testnet: true,
+});
+
+/**
+ * BOT Chain brand tokens — SteadyStake's partner network, so this is the one
+ * palette that is quoted verbatim rather than re-tinted per surface. `mark` is
+ * the exact green of /bot.svg; `primary`/`secondary` lift it for dark UI, and
+ * `bed` is the dark disc the green mark sits on in icon wells.
+ */
+export const BOT_BRAND = {
+  mark: "#10A37F",
+  primary: "#14C79A",
+  secondary: "#5EEAD4",
+  glow: "rgba(20, 199, 154, 0.32)",
+  onBrand: "#022C22",
+  bed: "#062A22",
+} as const;
+
 /** Chain icon URLs for header and network switcher modal – local assets so icons load reliably. */
 export const CHAIN_ICON_URLS: Record<number, string> = {
+  [botChain.id]: "/bot.svg",
+  [botTestnet.id]: "/bot.svg",
   [base.id]: "/base.svg",
   [baseSepolia.id]: "/base.svg",
   [sepolia.id]: "/eth.svg",
@@ -39,6 +92,20 @@ export const CHAIN_THEME: Record<
   number,
   { primary: string; secondary: string; glow: string; onBrand?: string }
 > = {
+  // BOT Chain leads the list: it is the partner network, and its palette is the
+  // brand green from /bot.svg rather than a per-surface re-tint (see BOT_BRAND).
+  [botChain.id]: {
+    primary: BOT_BRAND.primary,
+    secondary: BOT_BRAND.secondary,
+    glow: BOT_BRAND.glow,
+    onBrand: BOT_BRAND.onBrand,
+  },
+  [botTestnet.id]: {
+    primary: BOT_BRAND.primary,
+    secondary: BOT_BRAND.secondary,
+    glow: BOT_BRAND.glow,
+    onBrand: BOT_BRAND.onBrand,
+  },
   [base.id]: {
     primary: "#38BDF8",
     secondary: "#7DD3FC",
@@ -85,7 +152,13 @@ const kavaWithIcon = {
   iconBackground: "#FF564F",
 } as const;
 
+/**
+ * Order matters: this array drives the order of the RainbowKit network switcher,
+ * so BOT Chain — the partner network — sits at the top of the list.
+ */
 const ALL_CHAINS = [
+  { ...botChain, iconUrl: CHAIN_ICON_URLS[botChain.id], iconBackground: BOT_BRAND.bed },
+  { ...botTestnet, iconUrl: CHAIN_ICON_URLS[botTestnet.id], iconBackground: BOT_BRAND.bed },
   { ...base, iconUrl: CHAIN_ICON_URLS[base.id], iconBackground: "#0052FF" },
   { ...baseSepolia, iconUrl: CHAIN_ICON_URLS[baseSepolia.id], iconBackground: "#0052FF" },
   { ...sepolia, iconUrl: CHAIN_ICON_URLS[sepolia.id], iconBackground: "#627EEA" },
@@ -104,6 +177,8 @@ const ALL_TRANSPORTS: Record<number, ReturnType<typeof http>> = {
   [bsc.id]: http(),
   [kava.id]: http(),
   [polygon.id]: http(),
+  [botChain.id]: http(),
+  [botTestnet.id]: http(),
 };
 
 type ChainEntry = (typeof ALL_CHAINS)[number];

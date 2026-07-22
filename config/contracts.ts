@@ -76,6 +76,21 @@ const POLYGON_MAINNET_TOKENS = {
   WMATIC: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270" as const,
 };
 
+// BOT Chain mainnet (677) – https://dev-docs.botchain.ai/docs/DEX/contract-addresses/
+// The chain has no USDC; bridged USDT (6 decimals) is the vault's settlement stablecoin.
+const BOT_MAINNET_TOKENS = {
+  USDT: "0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C" as const,
+  WBOT: "0xD5452816194a3784dBa983426cCe7c122F4abd30" as const,
+  BDexV2Router02: "0x1414eD29FdFD322c3c0a830330ed982E2D629e76" as const,
+};
+
+// BOT Chain testnet (968) – same BDEX V2 stack against testnet liquidity
+const BOT_TESTNET_TOKENS = {
+  USDT: "0x75edC9335175Fc0552D51D48439F229c10420fe3" as const,
+  WBOT: "0xD5452816194a3784dBa983426cCe7c122F4abd30" as const,
+  BDexV2Router02: "0xD6425a02f0845B8D99e349C34D2E7A576E177345" as const,
+};
+
 // Ethereum Sepolia (11155111) – MockUSDC deployment (DeployEthSepoliaWithMockUSDC)
 const ETH_SEPOLIA_TOKENS = {
   USDC: "0x89A01f63A5F4b42d30483ee17c5f537A4B94b15E" as const,
@@ -191,6 +206,38 @@ const KAVA_MAINNET_TOKEN_LIST: TokenListEntry[] = [
     address: KAVA_MAINNET_TOKENS.WKAVA,
     decimals: 18,
     logo: getTokenLogoUrl(2222, KAVA_MAINNET_TOKENS.WKAVA),
+  },
+];
+
+// BOT Chain: BDEX has no token-list API yet, so this is the pair with real V2 liquidity.
+// Add more once BDEX pools exist for them — the adapter routes USDT -> WBOT -> token.
+const BOT_MAINNET_TOKEN_LIST: TokenListEntry[] = [
+  {
+    name: "Tether USD",
+    symbol: "USDT",
+    address: BOT_MAINNET_TOKENS.USDT,
+    decimals: 6,
+  },
+  {
+    name: "Wrapped BOT",
+    symbol: "WBOT",
+    address: BOT_MAINNET_TOKENS.WBOT,
+    decimals: 18,
+  },
+];
+
+const BOT_TESTNET_TOKEN_LIST: TokenListEntry[] = [
+  {
+    name: "Tether USD",
+    symbol: "USDT",
+    address: BOT_TESTNET_TOKENS.USDT,
+    decimals: 6,
+  },
+  {
+    name: "Wrapped BOT",
+    symbol: "WBOT",
+    address: BOT_TESTNET_TOKENS.WBOT,
+    decimals: 18,
   },
 ];
 
@@ -331,6 +378,20 @@ export function getTokenList(chainId: number): TokenListEntry[] {
       return KAVA_MAINNET_TOKEN_LIST;
     case 137:
       return POLYGON_MAINNET_TOKEN_LIST;
+    case 677:
+      return BOT_MAINNET_TOKEN_LIST;
+    case 968: {
+      // The MockUSDC deploy replaces bridged USDT/WBOT, which have no MockSwapRouter
+      // liquidity and so cannot be swapped once that stack is live.
+      const addrs = BY_CHAIN["968"];
+      if (addrs?.MockUSDC && addrs?.MockAERO) {
+        return [
+          { name: "USD Coin", symbol: "USDC", address: addrs.MockUSDC, decimals: 6 },
+          { name: "Aerodrome", symbol: "AERO", address: addrs.MockAERO, decimals: 18 },
+        ];
+      }
+      return BOT_TESTNET_TOKEN_LIST;
+    }
     default:
       return [];
   }
@@ -430,6 +491,38 @@ export function getContracts(chainId: number): ChainContracts | null {
       MockUSDC: KAVA_MAINNET_TOKENS.USDC,
       MockSwapRouter: ZERO_ADDRESS,
       MockAERO: KAVA_MAINNET_TOKENS.WKAVA,
+      MockDEGEN: ZERO_ADDRESS,
+      MockCBETH: ZERO_ADDRESS,
+      GasTank: addrs.GasTank ?? ZERO_ADDRESS,
+    };
+  }
+
+  // BOT Chain: MockUSDC holds the settlement stablecoin (USDT here) and MockSwapRouter holds
+  // the UniV2SwapAdapter, matching how the other chains reuse these fields.
+  if (chainId === 677) {
+    return {
+      chainId: 677,
+      DCAVault: addrs.DCAVault,
+      DCAResolver: addrs.DCAResolver,
+      MockUSDC: BOT_MAINNET_TOKENS.USDT,
+      MockSwapRouter: addrs.ZeroExAdapter ?? ZERO_ADDRESS,
+      MockAERO: BOT_MAINNET_TOKENS.WBOT,
+      MockDEGEN: ZERO_ADDRESS,
+      MockCBETH: ZERO_ADDRESS,
+      GasTank: addrs.GasTank ?? ZERO_ADDRESS,
+    };
+  }
+
+  // Testnet may run either stack: real bridged USDT + BDEX, or the self-contained
+  // MockUSDC + MockSwapRouter deploy. Deployed mocks win when present.
+  if (chainId === 968) {
+    return {
+      chainId: 968,
+      DCAVault: addrs.DCAVault,
+      DCAResolver: addrs.DCAResolver,
+      MockUSDC: addrs.MockUSDC ?? BOT_TESTNET_TOKENS.USDT,
+      MockSwapRouter: addrs.ZeroExAdapter ?? ZERO_ADDRESS,
+      MockAERO: addrs.MockAERO ?? BOT_TESTNET_TOKENS.WBOT,
       MockDEGEN: ZERO_ADDRESS,
       MockCBETH: ZERO_ADDRESS,
       GasTank: addrs.GasTank ?? ZERO_ADDRESS,
