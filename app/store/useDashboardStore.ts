@@ -10,6 +10,20 @@ import { DCA_FREQUENCY_INTERVALS } from "@/app/hooks/useDCAHelpers";
 import { REVERSE_FREQUENCY_MAP } from "@/lib/constants";
 import { getTokenLogoUrl } from "@/lib/token-logo";
 
+/**
+ * An admin hold placed on a plan from the operator dashboard. It stops the backend relayer from
+ * auto-executing the plan; nothing on-chain changes and the deposit is untouched, so the owner can
+ * still cancel the plan themselves and be refunded.
+ *
+ * `paused` is meant to be lifted; `cancelled` means automation has been stopped for good. Either
+ * way the card tells the owner to contact the admin, since only an admin can lift it.
+ */
+export interface PlanAdminControl {
+  status: "paused" | "cancelled";
+  reason: string | null;
+  updatedAt: string;
+}
+
 export interface DashboardPlanRecord {
   id: string;
   scheduleId: bigint;
@@ -31,6 +45,8 @@ export interface DashboardPlanRecord {
   isReady: boolean;
   isEnrolledForAutoExecution: boolean;
   executionMode: "auto" | "manual" | null;
+  /** Admin hold on auto-execution; null when nothing is holding the plan. */
+  adminControl: PlanAdminControl | null;
 }
 
 interface DashboardHistoryPoint {
@@ -160,6 +176,7 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
               ready: boolean;
               isEnrolledForAutoExecution: boolean;
               executionMode: "auto" | "manual" | null;
+              adminControl: PlanAdminControl | null;
             }>;
           };
         })
@@ -354,6 +371,11 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
               status === "active" && isEnrolledForAutoExecution,
             executionMode:
               status === "active" ? backendTiming?.executionMode ?? null : null,
+            // A hold only means anything while the plan can still run. Once it has completed or
+            // been cancelled on-chain there is no automation left to hold, so drop the notice
+            // rather than leaving a stale "contact the admin" on a finished plan.
+            adminControl:
+              status === "active" ? backendTiming?.adminControl ?? null : null,
           };
         })
         .filter((plan): plan is DashboardPlanRecord => plan !== null)

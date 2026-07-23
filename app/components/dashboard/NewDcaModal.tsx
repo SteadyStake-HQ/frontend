@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { useAccount, useBalance, useReadContract, useReadContracts, useWaitForTransactionReceipt } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
-import { useDCAVault, useDCAVaultRead, useTokenApproval, useTokenAllowance, useContracts, useGasTank, useGasTankAllChains, useGasCostPerExecutionForChain, requiredGasUsdc6Exact } from "@/app/hooks";
+import { useDCAVault, useDCAVaultRead, useTokenApproval, useTokenAllowance, useContracts, useGasTank, useGasTankAllChains, useGasTankLevel, useGasTankRefresh, useGasCostPerExecutionForChain, requiredGasUsdc6Exact } from "@/app/hooks";
+import { GasTankGauge } from "./GasTankVisuals";
 import { getGasCostPerRunUsd } from "@/config/gas-cost-env";
 import { CHAIN_NAMES, FREQUENCY_MAP } from "@/lib/constants";
 import { useSupportedTokens } from "@/app/hooks/useSupportedTokens";
@@ -14,6 +15,7 @@ import { FREQUENCY_OPTIONS, type FrequencyOptionId } from "@/config/frequencies-
 import { getTokenLogoUrl } from "@/lib/token-logo";
 import { formatUnits, getAddress, isAddress, parseUnits } from "viem";
 import { getBumpedGasOptions } from "@/lib/get-bumped-gas";
+import { parseTxError } from "@/lib/parse-tx-error";
 
 const CUSTOM_TOKENS_STORAGE_KEY = "steadystake-custom-tokens";
 
@@ -34,6 +36,17 @@ const MAX_BARS = 14;
 
 const usd = (n: number, dp = 2) =>
   n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+
+/**
+ * Gas tank amounts, in USDC. Gas is cents-scale — 0.001/run on cheap chains — so a plain 2dp
+ * format renders a 0.025 balance as "0.03" and makes a drained tank look untouched. Widen the
+ * precision for small balances so the number on screen is the number on chain.
+ */
+const gasUsdc = (n: number) =>
+  `${n.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: n > 0 && n < 0.1 ? 4 : 2,
+  })} USDC`;
 
 /** "in ~8 min" while a plan is short, a calendar date once it spans days. */
 function formatFinish(totalSeconds: number): string {
@@ -265,6 +278,13 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
   const [addingAddress, setAddingAddress] = useState<`0x${string}` | null>(null);
   const [addTokenError, setAddTokenError] = useState<string | null>(null);
   const [manageCustomTokensOpen, setManageCustomTokensOpen] = useState(false);
+  const [gasTankOpen, setGasTankOpen] = useState(false);
+  /**
+   * Where this plan's gas comes from. "tank" spends the balance the user already holds (on any
+   * network — the relayer picks a funded chain at execution time); "deposit" pulls fresh USDC
+   * from the wallet at create time. Null until the balance is known, then defaulted.
+   */
+  const [gasFundingSource, setGasFundingSource] = useState<"tank" | "deposit" | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -458,7 +478,8 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
     address
   );
   const { hasGasTank, deposit: depositToGasTank } = useGasTank();
-  const { totalBalanceUsdc6: gasTankBalance } = useGasTankAllChains(); // Global balance (any network), CEX-style
+  const { totalBalanceUsdc6: gasTankBalance, byChain: gasTankByChain } = useGasTankAllChains(); // Global balance (any network), CEX-style
+  const refreshGasTank = useGasTankRefresh();
   const { allowance: allowanceGasTank } = useTokenAllowance(
     contracts.MockUSDC,
     (hasGasTank && contracts.GasTank ? contracts.GasTank : "0x0000000000000000000000000000000000000000") as string,
@@ -482,8 +503,16 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
         ? gasCostPerExecutionUsdc6 * BigInt(totalRuns)
         : requiredGasUsdc6Exact(totalRuns, chainId)
       : 0n;
-  /** When auto-exec is on, gas is taken from USDC at create time and sent to gas tank; no separate top-up needed. */
-  const gasAddedAtCreate = enableAutoExec && hasGasTank && requiredGasForPlan > 0n;
+  /** The tank already holds enough — across all networks — to run this plan end to end. */
+  const tankCoversPlan = requiredGasForPlan > 0n && gasTankBalance >= requiredGasForPlan;
+  const effectiveGasSource: "tank" | "deposit" = gasFundingSource ?? (tankCoversPlan ? "tank" : "deposit");
+  /**
+   * Gas is pulled from the wallet at create time only when the user is funding this plan fresh.
+   * Choosing "tank" leaves the existing balance to cover it — the relayer deducts per run from
+   * whichever network has funds, so no top-up happens here.
+   */
+  const gasAddedAtCreate =
+    enableAutoExec && hasGasTank && requiredGasForPlan > 0n && effectiveGasSource === "deposit";
   const totalUsdcNeededForCreate = gasAddedAtCreate ? planTotalUsdc6 + requiredGasForPlan : planTotalUsdc6;
   const hasEnoughBalanceForCreate = balance >= totalUsdcNeededForCreate;
   const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
@@ -492,11 +521,29 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
     enableAutoExec &&
     enrolledCount === 0 &&
     hasGasTank &&
-    (requiredGasForPlan === 0n ||
+    (!gasAddedAtCreate ||
       (vaultGasTankAddress &&
         String(vaultGasTankAddress).toLowerCase() !== ZERO_ADDR.toLowerCase()))
   );
   const gasTankBalanceFormatted = Number(formatUnits(gasTankBalance, 6));
+  // Per-network gas tank balances, funded networks first, for the expandable breakdown.
+  const gasTankBreakdown = Object.entries(gasTankByChain)
+    .map(([cid, raw]) => {
+      const id = Number(cid);
+      const amount = Number(formatUnits(raw, 6));
+      return { chainId: id, name: CHAIN_NAMES[id] ?? `Chain ${id}`, amount };
+    })
+    .filter((c) => c.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+  const gasTankMaxShare = gasTankBreakdown[0]?.amount ?? 0;
+  /** How full the tank is, in the same terms the dashboard pill and the top-up modal use. */
+  const {
+    runsLeft: tankRunsLeft,
+    level: tankLevel,
+    isEmpty: tankIsEmpty,
+    isLow: tankIsLow,
+  } = useGasTankLevel(gasTankBalance, chainId);
+  const tankTone: "ok" | "low" | "empty" = tankIsEmpty ? "empty" : tankIsLow ? "low" : "ok";
   const requiredGasFormatted = requiredGasForPlan > 0n ? Number(formatUnits(requiredGasForPlan, 6)) : 0;
   const costPerRunUsd =
     gasCostPerExecutionUsdc6 > 0n
@@ -504,6 +551,33 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
       : chainId
         ? getGasCostPerRunUsd(chainId)
         : 0.01;
+
+  /**
+   * Which network's tank the relayer will actually charge for the first run. Mirrors
+   * `pickDeductChain` in backend/src/run-executor.ts: this chain when it can cover a run,
+   * otherwise the richest chain that can. Balances are global — a plan on one network can be
+   * paid for out of another network's tank — so say which one, rather than let the user guess.
+   */
+  const costPerRunUsdc6 = gasCostPerExecutionUsdc6 > 0n
+    ? gasCostPerExecutionUsdc6
+    : BigInt(Math.ceil(costPerRunUsd * 1_000_000));
+  const gasPayingChainId: number | null = (() => {
+    if (costPerRunUsdc6 <= 0n) return null;
+    if (chainId && (gasTankByChain[chainId] ?? 0n) >= costPerRunUsdc6) return chainId;
+    let best: number | null = null;
+    let bestBal = 0n;
+    for (const [cid, bal] of Object.entries(gasTankByChain)) {
+      if (bal >= costPerRunUsdc6 && bal > bestBal) {
+        best = Number(cid);
+        bestBal = bal;
+      }
+    }
+    return best;
+  })();
+  /** True when the paying tank is on a different network than the plan — worth calling out. */
+  const gasPaidCrossChain = gasPayingChainId != null && chainId != null && gasPayingChainId !== chainId;
+  const gasPayingChainName =
+    gasPayingChainId != null ? (CHAIN_NAMES[gasPayingChainId] ?? `Chain ${gasPayingChainId}`) : null;
 
   // Standard membership: one free auto-exec plan per network. Once they have one, new plans cannot use auto-exec.
   useEffect(() => {
@@ -602,6 +676,8 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
 
       const { invalidateDcaDashboardQueries } = await import("@/lib/invalidate-dca-queries");
       await invalidateDcaDashboardQueries(queryClient);
+      // A plan can be created with its gas prepaid, so the tank shown elsewhere just changed too.
+      await refreshGasTank();
       const { dispatchDashboardRefresh } = await import("@/lib/dashboard-refresh-event");
       dispatchDashboardRefresh();
       if (useBatchedCreateRef.current) {
@@ -620,7 +696,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
       }, 1500);
     };
     void run();
-  }, [pendingCreateTxHash, createReceipt, queryClient, onClose, enrolledCount, additionalAutoPlanFeeUsdc6, enrollForAutoExecution, approve, address, chainId, contracts.DCAVault, refetchCount, depositToGasTank]);
+  }, [pendingCreateTxHash, createReceipt, queryClient, onClose, enrolledCount, additionalAutoPlanFeeUsdc6, enrollForAutoExecution, approve, address, chainId, contracts.DCAVault, refetchCount, depositToGasTank, refreshGasTank]);
 
   // If tx reverted, show error and stop pending state
   useEffect(() => {
@@ -727,7 +803,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
       try {
         await approve(formatUnits(approvalAmount, 6), contracts.DCAVault);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Approval failed");
+        setError(parseTxError(err, "Approval failed"));
         setIsSubmitting(false);
         setStage(null);
         return;
@@ -741,7 +817,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
       try {
         await approve(formatUnits(gasNeededAtCreate, 6), contracts.GasTank);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Approval failed");
+        setError(parseTxError(err, "Approval failed"));
         setIsSubmitting(false);
         setStage(null);
         return;
@@ -824,11 +900,14 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
       setRunCount("");
       setToken(allTokenOptions[0]?.address ?? "");
       setFrequency(FREQUENCY_OPTIONS[0]?.id ?? 1);
+      // Back to "whatever the tank can cover" — a pick made for the old plan's run count
+      // should not silently carry into the next one.
+      setGasFundingSource(null);
       setPendingCreateTxHash(txHash);
       setStage("confirming");
       // Dashboard reload runs in useEffect when createReceipt.status === "success"
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create schedule");
+      setError(parseTxError(err, "Failed to create schedule"));
       setStage(null);
     } finally {
       setIsSubmitting(false);
@@ -1295,11 +1374,13 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                             <span className="dm-auto-badge">Free plan</span>
                           </span>
                           <span className="dm-auto-body">
-                            {enableAutoExec
-                              ? gasAddedAtCreate && requiredGasFormatted > 0
-                                ? `We run every buy for you. $${usd(requiredGasFormatted)} of gas is prepaid with this plan.`
-                                : "We run every buy for you — fully hands-off."
-                              : "Off — you'll execute each buy yourself from the dashboard."}
+                            {!enableAutoExec
+                              ? "Off — you'll execute each buy yourself from the dashboard."
+                              : requiredGasFormatted <= 0
+                                ? "We run every buy for you — fully hands-off."
+                                : gasAddedAtCreate
+                                  ? `We run every buy for you. ${gasUsdc(requiredGasFormatted)} of gas is prepaid with this plan.`
+                                  : `We run every buy for you. ${gasUsdc(requiredGasFormatted)} of gas comes from your existing tank.`}
                           </span>
                         </span>
                         <span className="dm-switch" aria-hidden />
@@ -1407,11 +1488,18 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                         <b>${usd(planTotal)}</b>
                       </div>
 
-                      {gasAddedAtCreate && requiredGasFormatted > 0 && (
-                        <div className="dm-cost-row">
-                          <span>Gas, prepaid (${usd(costPerRunUsd, 3)}/run)</span>
-                          <b>${usd(requiredGasFormatted)}</b>
-                        </div>
+                      {enableAutoExec && hasGasTank && requiredGasFormatted > 0 && (
+                        gasAddedAtCreate ? (
+                          <div className="dm-cost-row">
+                            <span>Gas, prepaid ({usd(costPerRunUsd, 3)} USDC/run)</span>
+                            <b>{gasUsdc(requiredGasFormatted)}</b>
+                          </div>
+                        ) : (
+                          <div className="dm-cost-row">
+                            <span>Gas ({usd(costPerRunUsd, 3)} USDC/run)</span>
+                            <b>from tank</b>
+                          </div>
+                        )
                       )}
 
                       <div className="dm-cost-row dm-cost-total">
@@ -1435,10 +1523,124 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                         </p>
                       )}
 
+                      {/* Where this plan's gas comes from. Only a real choice when the tank can
+                          actually cover the plan; otherwise the plan must fund itself. */}
+                      {enableAutoExec && hasGasTank && requiredGasForPlan > 0n && gasTankBalance > 0n && (
+                        <div className="dm-gassrc">
+                          <span className="dm-gassrc-label">Pay gas with</span>
+                          <div className="dm-gassrc-opts" role="radiogroup" aria-label="Gas funding source">
+                            <button
+                              type="button"
+                              role="radio"
+                              aria-checked={effectiveGasSource === "tank"}
+                              disabled={!tankCoversPlan}
+                              onClick={() => setGasFundingSource("tank")}
+                              className={`dm-gassrc-opt${effectiveGasSource === "tank" ? " is-on" : ""}`}
+                              title={
+                                tankCoversPlan
+                                  ? "Spend the balance already in your gas tank"
+                                  : `Your tank holds ${gasUsdc(gasTankBalanceFormatted)} — this plan needs ${gasUsdc(requiredGasFormatted)}`
+                              }
+                            >
+                              <span className="dm-gassrc-opt-title">Existing balance</span>
+                              <span className="dm-gassrc-opt-sub">{gasUsdc(gasTankBalanceFormatted)} available</span>
+                            </button>
+                            <button
+                              type="button"
+                              role="radio"
+                              aria-checked={effectiveGasSource === "deposit"}
+                              onClick={() => setGasFundingSource("deposit")}
+                              className={`dm-gassrc-opt${effectiveGasSource === "deposit" ? " is-on" : ""}`}
+                              title="Add this plan's gas from your wallet now"
+                            >
+                              <span className="dm-gassrc-opt-title">Top up now</span>
+                              <span className="dm-gassrc-opt-sub">+{gasUsdc(requiredGasFormatted)}</span>
+                            </button>
+                          </div>
+                          {!tankCoversPlan && (
+                            <p className="dm-gassrc-note">
+                              Your tank holds {gasUsdc(gasTankBalanceFormatted)}; this plan needs{" "}
+                              {gasUsdc(requiredGasFormatted)}. Top up to cover it.
+                            </p>
+                          )}
+                          {effectiveGasSource === "tank" && gasPaidCrossChain && gasPayingChainName && (
+                            <p className="dm-gassrc-note">
+                              Gas will be charged to your <strong>{gasPayingChainName}</strong> tank — you
+                              have no balance on this network. Balances are shared across networks.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
                       {gasTankBalanceFormatted > 0 && (
-                        <div className="dm-cost-row">
-                          <span>Gas tank (all networks)</span>
-                          <b>${usd(gasTankBalanceFormatted)}</b>
+                        <div className={`dm-gastank${gasTankOpen ? " is-open" : ""}`}>
+                          <button
+                            type="button"
+                            className="dm-gastank-toggle"
+                            onClick={() => setGasTankOpen((v) => !v)}
+                            aria-expanded={gasTankOpen}
+                            aria-controls="dm-gastank-panel"
+                          >
+                            <span className="dm-gastank-label">
+                              <svg className="dm-gastank-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 21V6a2 2 0 012-2h6a2 2 0 012 2v15M3 21h12" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M14 8h2.5A1.5 1.5 0 0118 9.5V16a1.5 1.5 0 003 0V9l-2.5-2.5" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 11h4" />
+                              </svg>
+                              Gas tank
+                              <span className="dm-gastank-count">{gasTankBreakdown.length} network{gasTankBreakdown.length === 1 ? "" : "s"}</span>
+                            </span>
+                            <span className="dm-gastank-right">
+                              <b>{gasUsdc(gasTankBalanceFormatted)}</b>
+                              <svg className="dm-gastank-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+                              </svg>
+                            </span>
+                          </button>
+
+                          <div className="dm-gastank-wrap" id="dm-gastank-panel" role="region" aria-label="Gas tank balance by network">
+                            <div className="dm-gastank-panel">
+                              <div className="dm-gastank-gauge">
+                                <GasTankGauge
+                                  level={tankLevel}
+                                  tone={tankTone}
+                                  size={62}
+                                  label={tankRunsLeft > 999 ? "999+" : String(tankRunsLeft)}
+                                  sublabel="runs"
+                                />
+                                <p className="dm-gastank-gauge-copy">
+                                  {tankIsLow
+                                    ? "Running low — a plan that outlives the tank stops until it is topped up."
+                                    : "Runs your tank can still pay for, at the current per-run cost."}
+                                </p>
+                              </div>
+                              <ul className="dm-gastank-list">
+                                {gasTankBreakdown.map((c, i) => (
+                                  <li
+                                    key={c.chainId}
+                                    className="dm-gastank-item"
+                                    style={{ ["--i" as string]: i }}
+                                  >
+                                    <span className="dm-gastank-net">
+                                      <span className={`dm-gastank-dot chain-${c.chainId}`} aria-hidden />
+                                      {c.name}
+                                    </span>
+                                    <span className="dm-gastank-bar" aria-hidden>
+                                      <span
+                                        className="dm-gastank-fill"
+                                        style={{ ["--w" as string]: `${gasTankMaxShare > 0 ? Math.max(6, (c.amount / gasTankMaxShare) * 100) : 0}%` }}
+                                      />
+                                    </span>
+                                    <span className="dm-gastank-amt">{gasUsdc(c.amount)}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                              <p className="dm-gastank-note">
+                                Balances are held per network but spend as one — a plan can draw gas from any
+                                network&apos;s tank.
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>

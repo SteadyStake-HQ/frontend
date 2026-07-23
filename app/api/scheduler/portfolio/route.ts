@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const SCHEDULER_API_URL = process.env.SCHEDULER_API_URL ?? process.env.NEXT_PUBLIC_SCHEDULER_API_URL ?? "";
+const SCHEDULER_API_URL =
+  process.env.SCHEDULER_API_URL ??
+  process.env.NEXT_PUBLIC_SCHEDULER_API_URL ??
+  (process.env.NODE_ENV === "development" ? "http://127.0.0.1:3340" : "");
 
 /**
  * GET /api/scheduler/portfolio?user=0x...&chainId=84532&limit=200

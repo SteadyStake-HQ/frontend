@@ -4,6 +4,7 @@ import { useState } from "react";
 import { usePublicClient, useWriteContract } from "wagmi";
 import { useContracts } from "@/app/hooks";
 import { DCA_VAULT_ABI } from "@/config/abis";
+import { parseTxError } from "@/lib/parse-tx-error";
 
 interface ExecuteSwapButtonProps {
   userAddress: string;
@@ -94,13 +95,13 @@ export function ExecuteSwapButton({
             onSuccess?.();
           },
           onError: async (err) => {
-            setError(err.message);
+            setError(parseTxError(err, "Failed to execute swap"));
             await settle();
           },
         }
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to execute swap");
+      setError(parseTxError(err, "Failed to execute swap"));
       await settle();
     }
   };

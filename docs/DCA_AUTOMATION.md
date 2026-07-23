@@ -26,6 +26,11 @@ will execute the plan. Manual execution still becomes available at the exact on-
 - **DCAVault**: unchanged; `executeSwap(user, scheduleId, swapData)` is called by anyone (the relayer).
 - **GasTank**: new contract; users `deposit`/`withdraw` USDC; only the **executor** can call `recordExecution(user, amountUsdc6)` to deduct and receive USDC.
 
+> **The executor must be set, or no gas is ever deducted.** A GasTank deployed with
+> `executor == address(0)` reverts every `recordExecution` with `OnlyExecutor` — swaps still run,
+> but tanks never drain. Deploys now fail when `RELAYER_ADDRESS` is missing; to audit or repair
+> tanks already live, run `node scripts/set-gastank-executor.js` (add `--apply` to send).
+
 Deploy GasTank per chain (see `contracts/script/Deploy.s.sol`), set `RELAYER_ADDRESS` when deploying so the relayer is the executor, then add the GasTank address to:
 - Frontend: `frontend/config/deployed-addresses.json` (add `GasTank` per chain).
 - Backend: `backend/deployed-addresses.json` (add `GasTank` per chain).
@@ -54,7 +59,7 @@ In `backend/`:
 | `RELAYER_PRIVATE_KEY` | Wallet that sends executeSwap and recordExecution; must be GasTank executor and hold native gas token. |
 | `SUPABASE_DB_URL` | Supabase Postgres (Session Pooler) connection string, shared with the frontend; stores the registered-user list. |
 | `ZERO_EX_API_KEY` | Optional; for 0x swap quotes. |
-| `GAS_COST_PER_EXECUTION_USDC` | Amount in USD per execution (e.g. `0.01`); converted to 6 decimals when calling recordExecution. |
+| `GAS_COST_PER_EXECUTION_USDC` | **Fallback only.** Per-execution cost in USDC (e.g. `0.01`), used only when the GasTank's own `gasCostPerExecutionUsdc6` is 0. The contract value is authoritative because it is what the UI quotes and what the user prepays — if this env var outranked it the relayer would deduct a different amount than the plan was funded for. |
 | `AUTOMATION_CHAIN_IDS` | Optional; comma-separated chain IDs (e.g. `84532,8453`). Empty = all registered chains. |
 
 Run once:

@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useContracts } from "@/app/hooks/useContracts";
 import { GAS_TANK_ABI, ERC20_ABI } from "@/config/abis";
 import { getContracts } from "@/config/contracts";
 import { SUPPORTED_CHAIN_IDS } from "@/config/chains-env";
+import { refreshGasTankBalances } from "@/lib/gas-tank-refresh";
 import { parseUnits } from "viem";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
@@ -23,6 +24,21 @@ import { getGasCostPerRunUsd } from "@/config/gas-cost-env";
 
 /** Buffer multiplier for network instability (user must have runs × cost × BUFFER in gas tank). */
 export const GAS_BUFFER_MULTIPLIER = 3;
+
+/** A tank that can cover this many runs is drawn full. Nothing on-chain says so — it is a scale. */
+export const RUNS_FOR_FULL_TANK = 100;
+
+/** Below this many remaining runs the tank is called out as running low. */
+export const LOW_TANK_RUNS = 10;
+
+/**
+ * Refresh every gas tank read on the page. Call after any deposit or withdraw — the balance is
+ * shown in several places at once and they all have to agree, not just the one that moved it.
+ */
+export function useGasTankRefresh(): () => Promise<void> {
+  const queryClient = useQueryClient();
+  return useCallback(() => refreshGasTankBalances(queryClient), [queryClient]);
+}
 
 export function useGasTank() {
   const { address } = useAccount();
@@ -68,8 +84,7 @@ export function useGasTank() {
           },
           {
             onSuccess: () => {
-              refetchBalance();
-              refetchAllowance();
+              void refreshGasTankBalances(queryClient);
               queryClient.invalidateQueries({ queryKey: ["dca-vault"] });
               resolve();
             },
@@ -78,7 +93,7 @@ export function useGasTank() {
         );
       });
     },
-    [address, hasGasTank, gasTankAddress, chainId, writeDeposit, refetchBalance, refetchAllowance, queryClient]
+    [address, hasGasTank, gasTankAddress, chainId, writeDeposit, queryClient]
   );
 
   const withdraw = useCallback(
@@ -96,7 +111,7 @@ export function useGasTank() {
           },
           {
             onSuccess: () => {
-              refetchBalance();
+              void refreshGasTankBalances(queryClient);
               resolve();
             },
             onError: reject,
@@ -104,7 +119,7 @@ export function useGasTank() {
         );
       });
     },
-    [address, hasGasTank, gasTankAddress, chainId, writeWithdraw, refetchBalance]
+    [address, hasGasTank, gasTankAddress, chainId, writeWithdraw, queryClient]
   );
 
   return {
@@ -151,21 +166,31 @@ export function requiredGasUsdc6(totalRuns: number, chainId: number): bigint {
   return BigInt(Math.ceil(usd * 1_000_000)); // 6 decimals
 }
 
+type ChainBalance = { balance: bigint; isLoading: boolean };
+
 /** Balance for one chain (for use in multi-chain aggregation). */
-function useGasTankBalanceForChain(chainId: number): bigint {
+function useGasTankBalanceForChain(chainId: number): ChainBalance {
   const { address } = useAccount();
   const contracts = getContracts(chainId);
   const gasTank = contracts?.GasTank;
   const hasGasTank = gasTank && gasTank !== ZERO;
-  const { data } = useReadContract({
+  const enabled = Boolean(address && hasGasTank);
+  const { data, isLoading } = useReadContract({
     address: hasGasTank ? (gasTank as `0x${string}`) : undefined,
     abi: GAS_TANK_ABI,
     functionName: "balanceOf",
     args: [address as `0x${string}`],
     chainId,
-    query: { enabled: !!address && !!hasGasTank, staleTime: 15_000 },
+    query: {
+      enabled,
+      staleTime: 15_000,
+      // The relayer spends this balance in the background, so a page left open should not
+      // keep quoting a number that has already been drawn down.
+      refetchInterval: 30_000,
+      refetchOnWindowFocus: true,
+    },
   });
-  return data ?? 0n;
+  return { balance: data ?? 0n, isLoading: enabled && isLoading };
 }
 
 /** Total gas tank balance across all networks (CEX-style: one balance, use on any chain). */
@@ -173,7 +198,7 @@ export function useGasTankAllChains(): {
   totalBalanceUsdc6: bigint;
   byChain: Record<number, bigint>;
   isLoading: boolean;
-  refetch: () => void;
+  refetch: () => Promise<void>;
 } {
   const b84532 = useGasTankBalanceForChain(84532);
   const b8453 = useGasTankBalanceForChain(8453);
@@ -183,21 +208,61 @@ export function useGasTankAllChains(): {
   const b2222 = useGasTankBalanceForChain(2222);
   const b677 = useGasTankBalanceForChain(677);
   const b968 = useGasTankBalanceForChain(968);
-  const byChain: Record<number, bigint> = {
-    84532: b84532,
-    8453: b8453,
-    11155111: b11155111,
-    56: b56,
-    137: b137,
-    2222: b2222,
-    677: b677,
-    968: b968,
-  };
-  const totalBalanceUsdc6 = b84532 + b8453 + b11155111 + b56 + b137 + b2222 + b677 + b968;
+  const refetch = useGasTankRefresh();
+
+  const byChain: Record<number, bigint> = useMemo(
+    () => ({
+      84532: b84532.balance,
+      8453: b8453.balance,
+      11155111: b11155111.balance,
+      56: b56.balance,
+      137: b137.balance,
+      2222: b2222.balance,
+      677: b677.balance,
+      968: b968.balance,
+    }),
+    [
+      b84532.balance,
+      b8453.balance,
+      b11155111.balance,
+      b56.balance,
+      b137.balance,
+      b2222.balance,
+      b677.balance,
+      b968.balance,
+    ]
+  );
+
+  const all = [b84532, b8453, b11155111, b56, b137, b2222, b677, b968];
+  const totalBalanceUsdc6 = all.reduce((sum, c) => sum + c.balance, 0n);
+
   return {
     totalBalanceUsdc6,
     byChain,
-    isLoading: false,
-    refetch: () => {},
+    isLoading: all.some((c) => c.isLoading),
+    refetch,
+  };
+}
+
+/**
+ * How many scheduled runs the tank can still pay for, and how full it looks.
+ *
+ * A raw USDC figure means nothing at cents scale — "0.0250 USDC" reads as empty until you know a
+ * run costs 0.001. Runs are the unit users actually care about, and the level drives the gauges.
+ */
+export function useGasTankLevel(balanceUsdc6: bigint, chainId: number | undefined) {
+  const contractCost = useGasCostPerExecutionForChain(chainId ?? 0);
+  const costPerRunUsdc6 =
+    contractCost > 0n
+      ? contractCost
+      : BigInt(Math.max(1, Math.ceil(getGasCostPerRunUsd(chainId ?? 0) * 1_000_000)));
+  const runsLeft = costPerRunUsdc6 > 0n ? Number(balanceUsdc6 / costPerRunUsdc6) : 0;
+  return {
+    costPerRunUsdc6,
+    runsLeft,
+    /** 0–1, full at RUNS_FOR_FULL_TANK runs — a gauge needs a ceiling and this is a plausible one. */
+    level: Math.min(1, runsLeft / RUNS_FOR_FULL_TANK),
+    isEmpty: balanceUsdc6 === 0n,
+    isLow: balanceUsdc6 > 0n && runsLeft < LOW_TANK_RUNS,
   };
 }

@@ -14,6 +14,7 @@ import {
 } from "./ExecuteAllModal";
 import { LoadingSkeleton } from "../LoadingComponents";
 import { DCA_VAULT_ABI } from "@/config/abis";
+import { parseTxError } from "@/lib/parse-tx-error";
 
 interface DashboardPlansProps {
   onAddPlan?: () => void;
@@ -102,16 +103,20 @@ function PlanTokenLogo({
 
 const PLAN_CARD_THEMES = ["mint", "lavender", "peach", "sky"] as const;
 
-/* The four states a card can be in. `ready` is not a contract status — it is
+/* The states a card can be in. `ready` is not a contract status — it is
    an active plan whose cooldown has elapsed — but it is the state a user most
-   needs to spot, so it gets its own visual treatment. */
-type PlanVisualState = "ready" | "active" | "ended" | "cancelled";
+   needs to spot, so it gets its own visual treatment. `held` is likewise not a
+   contract status: the plan is live on-chain, but an admin has stopped the
+   backend from executing it, and that outranks readiness because no amount of
+   waiting will make a held plan fire. */
+type PlanVisualState = "ready" | "active" | "ended" | "cancelled" | "held";
 
 const STATE_LABEL: Record<PlanVisualState, string> = {
   ready: "Ready",
   active: "Active",
   ended: "Completed",
   cancelled: "Cancelled",
+  held: "On hold",
 };
 
 /* The corner flag on the token: a shape per state, so it reads before the words do. */
@@ -120,6 +125,18 @@ const STATE_FLAG_PATH: Record<PlanVisualState, string> = {
   active: "M12 7v5l3 2",
   ended: "M5 13l4 4L19 7",
   cancelled: "M6 6l12 12M18 6L6 18",
+  held: "M9 6v12M15 6v12",
+};
+
+/* A hold reads differently depending on whether the admin means to lift it. */
+const HOLD_BADGE_LABEL: Record<"paused" | "cancelled", string> = {
+  paused: "Admin paused",
+  cancelled: "Admin stopped",
+};
+
+const HOLD_HEADLINE: Record<"paused" | "cancelled", string> = {
+  paused: "An admin paused this plan.",
+  cancelled: "An admin stopped automation for this plan.",
 };
 
 function SchedulePlanCard({
@@ -157,15 +174,21 @@ function SchedulePlanCard({
   const isContractReady =
     plan.status === "active" &&
     (plan.isReady || plan.contractDueTimestamp <= now);
+  // A hold takes precedence over `ready`: the cooldown may well have elapsed, but the plan is not
+  // going to run, and showing it as ready next to a "paused" notice would contradict itself.
+  const hold = plan.adminControl;
   const state: PlanVisualState =
     plan.status === "cancelled"
       ? "cancelled"
       : plan.status === "ended"
         ? "ended"
-        : isContractReady
-          ? "ready"
-          : "active";
+        : hold
+          ? "held"
+          : isContractReady
+            ? "ready"
+            : "active";
   const isDone = state === "ended" || state === "cancelled";
+  const stateLabel = hold ? HOLD_BADGE_LABEL[hold.status] : STATE_LABEL[state];
 
   const amount = Number(plan.amountPerInterval) || 0;
   const deposited = Number(plan.totalDeposited) || 0;
@@ -203,8 +226,10 @@ function SchedulePlanCard({
       className={[
         "plan-card-sweet",
         `plan-card-${theme}`,
-        plan.isEnrolledForAutoExecution ? "plan-card-autoexec" : "",
-        plan.status === "active" ? "pc-live" : "pc-dim",
+        // A held plan is not executing itself, so it drops the premium auto-exec treatment and
+        // the live pulse until the hold is lifted — both would advertise activity that has stopped.
+        plan.isEnrolledForAutoExecution && !hold ? "plan-card-autoexec" : "",
+        plan.status === "active" && !hold ? "pc-live" : "pc-dim",
         `pc-${state}`,
       ]
         .filter(Boolean)
@@ -235,12 +260,12 @@ function SchedulePlanCard({
         <span className="pc-sheen" />
       </div>
       <span className="pc-rail" aria-hidden />
-      {plan.isEnrolledForAutoExecution && <span className="pc-edge" aria-hidden />}
+      {plan.isEnrolledForAutoExecution && !hold && <span className="pc-edge" aria-hidden />}
 
       <div className="pc-body">
         <div className="pc-medallion">
           <PlanTokenLogo logo={plan.tokenLogo} symbol={plan.targetToken} name={plan.tokenName} />
-          <span className="pc-flag" title={STATE_LABEL[state]}>
+          <span className="pc-flag" title={stateLabel}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" aria-hidden>
               <path
                 strokeLinecap="round"
@@ -272,7 +297,9 @@ function SchedulePlanCard({
               Every {plan.frequency}
             </span>
 
-            {plan.status === "active" && (
+            {/* The countdown is a promise that the plan fires when it reaches zero. While a hold
+                is in force that promise is false, so the chip gives way to the hold notice. */}
+            {plan.status === "active" && !hold && (
               <span
                 className={`pc-chip pc-chip-time ${
                   !isContractReady ? "" : "pc-chip-now"
@@ -305,6 +332,22 @@ function SchedulePlanCard({
             )}
           </div>
 
+          {hold && (
+            <p className="pc-hold" role="status">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <circle cx="12" cy="12" r="9" />
+                <path strokeLinecap="round" d="M9.5 9.5v5M14.5 9.5v5" />
+              </svg>
+              <span>
+                <b>{HOLD_HEADLINE[hold.status]}</b> Automatic buys are on hold — please contact
+                the admin.
+                {hold.reason ? (
+                  <span className="pc-hold-reason">Reason: {hold.reason}</span>
+                ) : null}
+              </span>
+            </p>
+          )}
+
           <div className="pc-trackrow">
             <div className="pc-track">
               <span className="pc-track-fill" />
@@ -328,7 +371,9 @@ function SchedulePlanCard({
 
         <div className="pc-side">
           <div className="pc-badges">
-            {plan.isEnrolledForAutoExecution && (
+            {/* Suppressed while held: the badge says the backend will run this plan, which is
+                precisely what the hold has stopped. */}
+            {plan.isEnrolledForAutoExecution && !hold && (
               <span
                 className="pc-badge-auto"
                 title="This plan is enrolled for auto-execution by the backend executor."
@@ -339,16 +384,23 @@ function SchedulePlanCard({
                 Auto-exec
               </span>
             )}
-            <span className="pc-badge-state">
+            <span
+              className="pc-badge-state"
+              title={hold?.reason ?? undefined}
+            >
               <span className="pc-badge-dot" aria-hidden />
-              {plan.executionMode === "auto"
+              {plan.executionMode === "auto" && !hold
                 ? "Auto Executing..."
-                : STATE_LABEL[state]}
+                : stateLabel}
             </span>
           </div>
 
           <div className="pc-actions">
-            {userAddress && plan.status === "active" && (
+            {/* Hidden rather than disabled while held: the notice above already explains why the
+                plan cannot run, and the vault would still accept a wallet-signed swap, so offering
+                the button at all invites the user to work around a decision they were asked to
+                discuss with the admin first. */}
+            {userAddress && plan.status === "active" && !hold && (
               <ExecuteSwapButton
                 userAddress={userAddress}
                 scheduleId={plan.scheduleId}
@@ -510,6 +562,9 @@ export function DashboardPlans({ onAddPlan }: DashboardPlansProps) {
         (plan) =>
           plan.status === "active" &&
           plan.executionMode == null &&
+          // An admin hold takes a plan out of Execute All as well, so a bulk run cannot do what
+          // the per-card button deliberately refuses to.
+          plan.adminControl == null &&
           (plan.isReady ||
             (plan.contractDueTimestamp > 0 &&
               plan.contractDueTimestamp <= contractCurrentTime)),
@@ -573,7 +628,7 @@ export function DashboardPlans({ onAddPlan }: DashboardPlansProps) {
           );
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Execution failed";
+        const msg = parseTxError(err, "Execution failed");
         setExecutionTimeline((prev) => ({ ...prev, [idStr]: "error" }));
         setExecutionErrors((prev) => ({ ...prev, [idStr]: msg }));
       }

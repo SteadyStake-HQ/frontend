@@ -144,6 +144,34 @@ function Pipeline() {
   );
 }
 
+/** Built-in cadences a user can pick in the plan modal (see config/frequencies-env.ts). */
+const CADENCES = ["Daily", "Weekly", "Bi-weekly", "Monthly"] as const;
+
+/**
+ * Cadence picker mock: the highlight walks the chips on a loop, so the card
+ * shows that the interval is a choice rather than a fixed window we impose.
+ */
+function CadencePicker() {
+  return (
+    <div className="hw-cadence" aria-hidden>
+      <div className="hw-cadence-chips">
+        {CADENCES.map((label, i) => (
+          <span
+            key={label}
+            className="hw-cadence-chip"
+            style={{ animationDelay: `${i * 1.1}s` }}
+          >
+            {label}
+          </span>
+        ))}
+      </div>
+      <div className="hw-cadence-track">
+        <span className="hw-cadence-pulse" />
+      </div>
+    </div>
+  );
+}
+
 const STEPS = [
   {
     step: 1,
@@ -163,9 +191,10 @@ const STEPS = [
     lead: "Pick it once, per network.",
     rows: [
       { k: "Token", v: "Whatever the DEX router supports" },
-      { k: "Frequency", v: "Daily · Weekly · Bi-weekly · Monthly" },
+      { k: "Cadence", v: "Choose a built-in interval" },
     ],
-    foot: "Change or cancel it whenever you want.",
+    cadence: true,
+    foot: "Need an interval that isn't listed? Contact an admin for a custom period.",
   },
   {
     step: 3,
@@ -173,7 +202,7 @@ const STEPS = [
     title: "It runs itself",
     lead: "Auto or manual — your call.",
     rows: [
-      { k: "Auto", v: "Fixed daily window (e.g. 00:00 UTC)" },
+      { k: "Auto", v: "Repeats on the interval you selected" },
       { k: "Manual", v: "You press go when ready" },
     ],
     foot: "Funds stay in your vault until each swap.",
@@ -229,6 +258,8 @@ export function HowItWorks() {
                         </div>
                       ))}
                     </dl>
+
+                    {"cadence" in item && item.cadence && <CadencePicker />}
 
                     <p className="hw-step-foot">{item.foot}</p>
                   </div>

@@ -140,7 +140,7 @@ const PAIRS = [
     },
     solution: {
       title: "One plan, then autopilot",
-      body: "Pick token, amount and frequency once, per network. Auto mode runs in a fixed daily window (e.g. 00:00 UTC); manual mode runs when you say go.",
+      body: "Pick token, amount and cadence once, per network. Auto mode repeats on the interval you chose — Daily, Weekly, Bi-weekly or Monthly — and manual mode runs when you say go. Need a cadence that isn't listed? Talk to an admin.",
     },
     graphic: "chains" as const,
   },

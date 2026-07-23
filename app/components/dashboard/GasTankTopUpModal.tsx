@@ -1,25 +1,59 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useAccount, useBalance, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
-import { useContracts } from "@/app/hooks/useContracts";
-import { useGasTankAllChains, getChainsWithGasTank } from "@/app/hooks/useGasTank";
-import { useTokenApproval, useTokenAllowance } from "@/app/hooks";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { toast } from "react-toastify";
+import {
+  useAccount,
+  useBalance,
+  usePublicClient,
+  useReadContract,
+  useSwitchChain,
+  useWriteContract,
+} from "wagmi";
+import {
+  useGasTankAllChains,
+  useGasTankLevel,
+  useGasTankRefresh,
+  getChainsWithGasTank,
+} from "@/app/hooks/useGasTank";
 import { GAS_TANK_ABI, ERC20_ABI } from "@/config/abis";
 import { getContracts } from "@/config/contracts";
+import { CHAIN_ICON_URLS } from "@/config/wagmi";
 import { CHAIN_NAMES } from "@/lib/constants";
 import { formatUnits, parseUnits } from "viem";
+import { parseTxError } from "@/lib/parse-tx-error";
+import {
+  AnimatedGasAmount,
+  GasTankGauge,
+  GasTankIcon,
+  formatGasAmount,
+  gasAmountFromUsdc6,
+} from "./GasTankVisuals";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
+
+/** Top-up sizes that cover a useful number of runs without making the user do the arithmetic. */
+const QUICK_AMOUNTS = [1, 5, 10, 25];
+
+/**
+ * The stages a top-up can be in. Only one is ever active, and it is the truth — the same grammar
+ * the create-plan modal speaks, because this is the same kind of multi-signature errand.
+ */
+type Stage = "switching" | "approving" | "depositing" | "confirming" | "done";
 
 function ChainSelect({
   selectedChainId,
   chainIds,
+  byChain,
   onSelect,
+  disabled,
 }: {
   selectedChainId: number;
   chainIds: number[];
+  byChain: Record<number, bigint>;
   onSelect: (chainId: number) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -32,49 +66,42 @@ function ChainSelect({
     return () => document.removeEventListener("mousedown", onOutside);
   }, []);
 
-  const selectedLabel = CHAIN_NAMES[selectedChainId] ?? `Chain ${selectedChainId}`;
+  const label = CHAIN_NAMES[selectedChainId] ?? `Chain ${selectedChainId}`;
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="gt-select">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-[var(--hero-muted)]/15 bg-[var(--foreground)]/[0.04] px-3 py-2.5 text-left text-sm text-[var(--foreground)] transition-colors focus:border-[var(--hero-primary)]/40 focus:outline-none focus:ring-1 focus:ring-[var(--hero-primary)]/20"
+        disabled={disabled}
+        className="gt-select-btn"
+        aria-expanded={open}
+        aria-haspopup="listbox"
       >
-        <span className="truncate font-medium">{selectedLabel}</span>
-        <svg
-          className={`h-5 w-5 shrink-0 text-[var(--hero-muted)] transition-transform ${open ? "rotate-180" : ""}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        <ChainMark chainId={selectedChainId} />
+        <span className="gt-select-name">{label}</span>
+        <span className="gt-select-bal">{gasAmountFromUsdc6(byChain[selectedChainId] ?? 0n)}</span>
+        <svg className={`gt-select-caret${open ? " is-open" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
+
       {open && (
-        <div
-          className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-[var(--hero-muted)]/15 bg-[var(--background)] shadow-lg"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <ul className="max-h-52 overflow-auto py-1" role="listbox">
-            {chainIds.map((cid) => (
-              <li key={cid} role="option" aria-selected={selectedChainId === cid}>
+        <div className="gt-select-pop" onMouseDown={(e) => e.stopPropagation()}>
+          <ul role="listbox">
+            {chainIds.map((cid, i) => (
+              <li key={cid} role="option" aria-selected={selectedChainId === cid} style={{ ["--i" as string]: i }}>
                 <button
                   type="button"
                   onClick={() => {
                     onSelect(cid);
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-[var(--hero-muted)]/10 ${
-                    selectedChainId === cid
-                      ? "bg-[var(--hero-primary)]/15 text-[var(--hero-primary)]"
-                      : "text-[var(--foreground)]"
-                  }`}
+                  className={`gt-select-item${selectedChainId === cid ? " is-selected" : ""}`}
                 >
-                  <span className="min-w-0 flex-1 truncate">
-                    {CHAIN_NAMES[cid] ?? `Chain ${cid}`}
-                  </span>
+                  <ChainMark chainId={cid} />
+                  <span className="gt-select-name">{CHAIN_NAMES[cid] ?? `Chain ${cid}`}</span>
+                  <span className="gt-select-bal">{gasAmountFromUsdc6(byChain[cid] ?? 0n)}</span>
                 </button>
               </li>
             ))}
@@ -85,6 +112,19 @@ function ChainSelect({
   );
 }
 
+function ChainMark({ chainId, className }: { chainId: number; className?: string }) {
+  const icon = CHAIN_ICON_URLS[chainId];
+  const name = CHAIN_NAMES[chainId] ?? `Chain ${chainId}`;
+  if (!icon) {
+    return <span className={`gt-chain-mark gt-chain-mark-fallback ${className ?? ""}`} aria-hidden>{name.slice(0, 1)}</span>;
+  }
+  return (
+    <span className={`gt-chain-mark ${className ?? ""}`} aria-hidden>
+      <Image src={icon} alt="" width={20} height={20} />
+    </span>
+  );
+}
+
 interface GasTankTopUpModalProps {
   open: boolean;
   onClose: () => void;
@@ -92,275 +132,564 @@ interface GasTankTopUpModalProps {
 
 export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
   const { address, isConnected, chainId: walletChainId } = useAccount();
-  const { chainId: contractsChainId, contracts } = useContracts();
-  const chainsWithGasTank = getChainsWithGasTank();
+  const chainsWithGasTank = useMemo(() => getChainsWithGasTank(), []);
   const { totalBalanceUsdc6, byChain } = useGasTankAllChains();
+  const refreshGasTank = useGasTankRefresh();
+
   const [selectedChainId, setSelectedChainId] = useState<number>(chainsWithGasTank[0] ?? 84532);
   const [amount, setAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [pendingApproveHash, setPendingApproveHash] = useState<`0x${string}` | undefined>(undefined);
-  const overlayRef = useRef<HTMLDivElement>(null);
+  const [stage, setStage] = useState<Stage | null>(null);
+  /** Which steps this particular top-up needs. Set at submit, so the rail never invents one. */
+  const [flow, setFlow] = useState<{ switchNetwork: boolean; approve: boolean }>({
+    switchNetwork: false,
+    approve: false,
+  });
+  const [txHash, setTxHash] = useState<`0x${string}` | undefined>(undefined);
+  /** What the finished top-up added, kept for the success card after the input is cleared. */
+  const [addedUsdc6, setAddedUsdc6] = useState<bigint>(0n);
+  /** The network row to highlight once its balance has just grown. */
+  const [freshChainId, setFreshChainId] = useState<number | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const { data: approveReceipt } = useWaitForTransactionReceipt({ hash: pendingApproveHash });
-
   const contractsForChain = getContracts(selectedChainId);
-  const isOnSelectedChain = walletChainId === selectedChainId;
-  const { switchChain } = useSwitchChain();
-  const { approve, isLoading: isApproving } = useTokenApproval(
-    isOnSelectedChain && contracts?.MockUSDC ? contracts.MockUSDC : ""
-  );
-  const { allowance, refetchAllowance } = useTokenAllowance(
-    contracts?.MockUSDC ?? "",
-    contracts?.GasTank ?? "",
-    address
-  );
+  const gasTankAddr = contractsForChain?.GasTank;
+  const usdcAddr = contractsForChain?.MockUSDC;
+  const hasGasTank = Boolean(gasTankAddr && gasTankAddr !== ZERO && usdcAddr && usdcAddr !== ZERO);
+
+  const publicClient = usePublicClient({ chainId: selectedChainId });
+  const { switchChainAsync } = useSwitchChain();
+  const { writeContractAsync } = useWriteContract();
+
   const { data: usdcBalance } = useBalance({
     address: address ?? undefined,
-    token: (isOnSelectedChain ? contracts?.MockUSDC : contractsForChain?.MockUSDC) as `0x${string}`,
+    token: usdcAddr as `0x${string}`,
     chainId: selectedChainId,
+    query: { enabled: Boolean(address && hasGasTank) },
   });
-  const { writeContract: writeDeposit, isPending: isDepositing } = useWriteContract();
 
-  const amountWei = amount ? parseUnits(amount, 6) : 0n;
-  const gasTankAddr = isOnSelectedChain ? contracts?.GasTank : contractsForChain?.GasTank;
-  const needsApproval = gasTankAddr && gasTankAddr !== ZERO && allowance < amountWei && amountWei > 0n;
-  const canDeposit = isOnSelectedChain && amountWei > 0n && allowance >= amountWei && gasTankAddr && gasTankAddr !== ZERO;
+  /** Allowance on the network being topped up, not the one the wallet happens to sit on. */
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+    address: usdcAddr as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args: [address as `0x${string}`, gasTankAddr as `0x${string}`],
+    chainId: selectedChainId,
+    query: { enabled: Boolean(address && hasGasTank) },
+  });
+
+  const { runsLeft, level, isEmpty, isLow, costPerRunUsdc6 } = useGasTankLevel(
+    totalBalanceUsdc6,
+    selectedChainId,
+  );
+
+  const amountWei = (() => {
+    const trimmed = amount.trim();
+    if (!trimmed) return 0n;
+    try {
+      return parseUnits(trimmed, 6);
+    } catch {
+      return 0n;
+    }
+  })();
+  const walletUsdc = usdcBalance?.value ?? 0n;
+  const needsApproval = (allowance ?? 0n) < amountWei;
+  const needsSwitch = walletChainId !== selectedChainId;
+  const overBalance = amountWei > 0n && amountWei > walletUsdc;
+  const runsBought = costPerRunUsdc6 > 0n ? Number(amountWei / costPerRunUsdc6) : 0;
+  const isBusy = stage !== null && stage !== "done";
+  const canSubmit = isConnected && hasGasTank && amountWei > 0n && !overBalance && !isBusy;
+
+  const tone: "ok" | "low" | "empty" = isEmpty ? "empty" : isLow ? "low" : "ok";
+
+  /** Funded networks first — the ones with nothing in them are noise until they are picked. */
+  const breakdown = chainsWithGasTank
+    .map((cid) => ({ chainId: cid, amount: byChain[cid] ?? 0n }))
+    .sort((a, b) => (b.amount > a.amount ? 1 : b.amount < a.amount ? -1 : 0));
+  const maxShare = breakdown[0]?.amount ?? 0n;
 
   useEffect(() => {
     if (!open) return;
-    const onEscape = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // Escape must not unmount us mid-transaction: the flow that waits for receipts lives here.
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isBusy) onClose();
+    };
     document.addEventListener("keydown", onEscape);
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onEscape);
       document.body.style.overflow = "";
     };
-  }, [open, onClose]);
+  }, [open, onClose, isBusy]);
+
+  /**
+   * Open on the network the wallet is already on, when it has a tank. Defaulting to the first
+   * deployed chain made an unnecessary network switch the common case.
+   */
+  const pickedOnOpen = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      pickedOnOpen.current = false;
+      return;
+    }
+    if (pickedOnOpen.current || chainsWithGasTank.length === 0) return;
+    pickedOnOpen.current = true;
+    const preferred =
+      walletChainId && chainsWithGasTank.includes(walletChainId)
+        ? walletChainId
+        : chainsWithGasTank[0];
+    if (preferred !== selectedChainId) setSelectedChainId(preferred);
+  }, [open, walletChainId, chainsWithGasTank, selectedChainId]);
+
+  // A fresh open starts from a clean slate — a stale error or a finished rail is not this run's.
+  useEffect(() => {
+    if (open) return;
+    setStage(null);
+    setError(null);
+    setTxHash(undefined);
+    setAmount("");
+    setAddedUsdc6(0n);
+    setFreshChainId(null);
+  }, [open]);
 
   useEffect(() => {
-    if (open && chainsWithGasTank.length > 0 && !chainsWithGasTank.includes(selectedChainId)) {
-      setSelectedChainId(chainsWithGasTank[0]);
-    }
-  }, [open, chainsWithGasTank, selectedChainId]);
-
-  // After approval tx is confirmed, refetch allowance so the button switches to Deposit
-  useEffect(() => {
-    if (approveReceipt?.status === "success" && pendingApproveHash) {
-      refetchAllowance?.();
-      setPendingApproveHash(undefined);
-      setSuccess("Approved. You can deposit now.");
-    }
-  }, [approveReceipt?.status, pendingApproveHash, refetchAllowance]);
+    if (error) toast.error(error);
+  }, [error]);
 
   const handleOverlayClick = (e: React.MouseEvent) => {
+    if (isBusy) return;
     if (contentRef.current && !contentRef.current.contains(e.target as Node)) onClose();
   };
 
-  const handleApprove = async () => {
-    if (!amount || !contracts?.GasTank) return;
-    setError(null);
-    try {
-      const hash = await approve(amount, contracts.GasTank);
-      if (hash) {
-        setPendingApproveHash(hash);
-        setSuccess("Approving…");
-      } else {
-        await refetchAllowance?.();
-        setSuccess("Approved. You can deposit now.");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Approval failed");
+  /**
+   * Approve and deposit as one errand.
+   *
+   * These used to be two buttons the user had to find in sequence, with the second only appearing
+   * once the first confirmed — so a top-up looked finished when the money had not moved. Now the
+   * whole thing runs from one press, and every signature the wallet asks for is a step on the rail.
+   */
+  const handleTopUp = async () => {
+    if (!address || !hasGasTank || amountWei <= 0n) return;
+    if (!publicClient) {
+      setError("No RPC connection for this network — try again in a moment.");
+      return;
     }
-  };
 
-  const handleDeposit = async () => {
-    if (!amount || !contracts?.GasTank || !address) return;
     setError(null);
-    setSuccess(null);
-    return new Promise<void>((resolve, reject) => {
-      writeDeposit(
-        {
-          address: contracts.GasTank as `0x${string}`,
-          abi: GAS_TANK_ABI,
-          functionName: "deposit",
-          args: [amountWei],
+    const willSwitch = needsSwitch;
+    const willApprove = needsApproval;
+    setFlow({ switchNetwork: willSwitch, approve: willApprove });
+
+    try {
+      if (willSwitch) {
+        setStage("switching");
+        await switchChainAsync({ chainId: selectedChainId });
+      }
+
+      if (willApprove) {
+        setStage("approving");
+        const approveHash = await writeContractAsync({
+          address: usdcAddr as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [gasTankAddr as `0x${string}`, amountWei],
           chainId: selectedChainId,
-        },
-        {
-          onSuccess: () => {
-            setSuccess("Deposit successful.");
-            setAmount("");
-            resolve();
-          },
-          onError: (err) => {
-            setError(err.message);
-            reject(err);
-          },
+        });
+        const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        if (approveReceipt.status !== "success") {
+          throw new Error("The approval transaction reverted on-chain.");
         }
-      );
-    });
+        await refetchAllowance();
+      }
+
+      setStage("depositing");
+      const depositHash = await writeContractAsync({
+        address: gasTankAddr as `0x${string}`,
+        abi: GAS_TANK_ABI,
+        functionName: "deposit",
+        args: [amountWei],
+        chainId: selectedChainId,
+      });
+      setTxHash(depositHash);
+
+      setStage("confirming");
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: depositHash });
+      if (receipt.status !== "success") {
+        throw new Error("The deposit transaction reverted on-chain.");
+      }
+
+      // Only now is the balance real. Refresh every surface before saying so.
+      const deposited = amountWei;
+      setAddedUsdc6(deposited);
+      setFreshChainId(selectedChainId);
+      setAmount("");
+      await refreshGasTank();
+      setStage("done");
+      toast.success(`${gasAmountFromUsdc6(deposited)} USDC added to your gas tank.`);
+
+      window.setTimeout(() => {
+        setStage(null);
+        setTxHash(undefined);
+      }, 2200);
+    } catch (err) {
+      setError(parseTxError(err, "Top up failed"));
+      setStage(null);
+      setTxHash(undefined);
+    }
   };
 
   if (!open) return null;
 
-  const totalFormatted = Number(formatUnits(totalBalanceUsdc6, 6));
+  /** The steps this top-up will take, in order, built from the flow captured at submit. */
+  const steps: { id: Stage; label: string; note: string }[] = [
+    ...(flow.switchNetwork
+      ? [
+          {
+            id: "switching" as const,
+            label: `Switch to ${CHAIN_NAMES[selectedChainId] ?? selectedChainId}`,
+            note: "Your wallet needs to be on the network you are funding.",
+          },
+        ]
+      : []),
+    ...(flow.approve
+      ? [
+          {
+            id: "approving" as const,
+            label: "Approve USDC",
+            note: "Lets the gas tank pull exactly this amount — nothing more.",
+          },
+        ]
+      : []),
+    {
+      id: "depositing" as const,
+      label: "Confirm the deposit",
+      note: "Signs the transfer into your tank.",
+    },
+    {
+      id: "confirming" as const,
+      label: "Confirming on-chain",
+      note: `Waiting for ${CHAIN_NAMES[selectedChainId] ?? "the network"} to include it.`,
+    },
+  ];
+  const stageIndex = stage === "done" ? steps.length : steps.findIndex((s) => s.id === stage);
+
+  const buttonLabel = !isConnected
+    ? "Connect your wallet"
+    : amountWei <= 0n
+      ? "Enter an amount"
+      : overBalance
+        ? "Not enough USDC"
+        : needsSwitch
+          ? `Switch, approve & deposit`
+          : needsApproval
+            ? "Approve & deposit"
+            : `Deposit ${formatGasAmount(Number(formatUnits(amountWei, 6)))} USDC`;
 
   return (
-    <div
-      ref={overlayRef}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="gas-tank-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onClick={handleOverlayClick}
-    >
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-md" aria-hidden />
+    <>
       <div
-        ref={contentRef}
-        className="relative w-full max-w-md overflow-hidden rounded-2xl border border-[var(--hero-muted)]/10 bg-[var(--background)] shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="gas-tank-modal-title"
+        className="dm-overlay"
+        onClick={handleOverlayClick}
       >
-        {/* Compact header */}
-        <div
-          className="flex items-center justify-between px-4 py-3 text-white"
-          style={{
-            background: "linear-gradient(135deg, var(--hero-primary) 0%, var(--hero-secondary) 100%)",
-          }}
-        >
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/15">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M5 21V8l7-4 7 4v13M12 12v9M9 6h6M9 10h6" />
-              </svg>
+        <div className="dm-veil" aria-hidden>
+          <span className="dm-veil-bloom dm-veil-bloom-a" />
+          <span className="dm-veil-bloom dm-veil-bloom-b" />
+        </div>
+
+        <div ref={contentRef} className="gt-shell" onClick={(e) => e.stopPropagation()}>
+          <span className="dm-edge" aria-hidden />
+
+          {/* Header */}
+          <div className="gt-head">
+            <span className="gt-head-grid" aria-hidden />
+            <span className="gt-head-sheen" aria-hidden />
+            <span className="gt-head-mark" aria-hidden>
+              <GasTankIcon />
             </span>
-            <div className="min-w-0">
-              <h2 id="gas-tank-modal-title" className="text-base font-semibold leading-tight">
+            <div className="gt-head-copy">
+              <h2 id="gas-tank-modal-title" className="gt-title">
                 Gas tank
               </h2>
-              <p className="truncate text-xs text-white/80">
-                Top up with USDC · Balance per network
-              </p>
+              <p className="gt-sub">One balance, spendable on any network</p>
             </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="ml-2 shrink-0 rounded-lg p-1.5 text-white/90 transition-colors hover:bg-white/20"
-            aria-label="Close"
-          >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="space-y-4 p-4">
-          {/* Total balance */}
-          {isConnected && (
-            <div className="flex items-center justify-between rounded-xl bg-[var(--hero-primary)]/5 border border-[var(--hero-primary)]/10 px-4 py-3">
-              <span className="text-sm text-[var(--hero-muted)]">Total balance</span>
-              <span className="text-lg font-semibold tabular-nums text-[var(--hero-primary)]">
-                ${totalFormatted.toFixed(2)} USDC
-              </span>
-            </div>
-          )}
-
-          {/* By network */}
-          {chainsWithGasTank.length > 0 && (
-            <div className="rounded-xl border border-[var(--hero-muted)]/10 bg-[var(--foreground)]/[0.02] p-3">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--hero-muted)]">
-                By network
-              </p>
-              <ul className="space-y-1.5">
-                {chainsWithGasTank.map((cid) => (
-                  <li key={cid} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-[var(--foreground)]">{CHAIN_NAMES[cid] ?? `Chain ${cid}`}</span>
-                    <span className="font-medium tabular-nums">${Number(formatUnits(byChain[cid] ?? 0n, 6)).toFixed(2)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Top up section */}
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-[var(--hero-muted)]">
-              Top up on
-            </label>
-            <ChainSelect
-              selectedChainId={selectedChainId}
-              chainIds={chainsWithGasTank}
-              onSelect={setSelectedChainId}
-            />
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isBusy}
+              className="gt-close"
+              aria-label="Close"
+            >
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
 
-          {!isOnSelectedChain && (
-            <div className="flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-              <p className="text-sm text-amber-700 dark:text-amber-400">
-                Switch wallet to <strong>{CHAIN_NAMES[selectedChainId] ?? selectedChainId}</strong> to top up here.
-              </p>
-              <button
-                type="button"
-                onClick={() => switchChain?.({ chainId: selectedChainId })}
-                className="ss-btn ss-btn-soft ss-btn-sm self-start"
-              >
-                Switch network
-              </button>
-            </div>
-          )}
-
-          {isOnSelectedChain && contracts?.GasTank && contracts.GasTank !== ZERO && (
-            <div className="space-y-2">
-              {usdcBalance && (
-                <p className="text-xs text-[var(--hero-muted)]">
-                  Your USDC: <span className="font-medium text-[var(--foreground)]">{Number(formatUnits(usdcBalance.value, 6)).toFixed(2)}</span>
-                </p>
-              )}
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => { setAmount(e.target.value); setError(null); setSuccess(null); }}
-                className="w-full rounded-xl border border-[var(--hero-muted)]/15 bg-[var(--background)] px-3 py-2.5 text-sm text-[var(--foreground)] placeholder:text-[var(--hero-muted)] focus:border-[var(--hero-primary)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--hero-primary)]/20"
-              />
-              <div className="block w-full">
-                {needsApproval ? (
-                  <button
-                    type="button"
-                    disabled={!amount || isApproving || !!pendingApproveHash || isDepositing}
-                    onClick={handleApprove}
-                    data-loading={isApproving || pendingApproveHash ? "true" : undefined}
-                    className="ss-btn ss-btn-soft ss-btn-block"
-                  >
-                    {isApproving || pendingApproveHash ? "Confirming…" : "Approve & Deposit"}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={!canDeposit || isDepositing}
-                    onClick={() => handleDeposit()}
-                    data-loading={isDepositing ? "true" : undefined}
-                    className="ss-btn ss-btn-primary ss-btn-block"
-                  >
-                    {isDepositing ? "Confirming…" : "Deposit"}
-                  </button>
+          <div className="gt-body">
+            {/* ---------- What is in the tank ---------- */}
+            {isConnected && (
+              <section className={`gt-hero gt-hero-${tone}`}>
+                <span className="gt-hero-mesh" aria-hidden />
+                <GasTankGauge
+                  level={level}
+                  tone={tone}
+                  size={104}
+                  label={isEmpty ? "0" : runsLeft > 999 ? "999+" : String(runsLeft)}
+                  sublabel="runs"
+                  pulse={isEmpty}
+                />
+                <div className="gt-hero-copy">
+                  <p className="gt-hero-label">Total balance</p>
+                  <p className="gt-hero-value">
+                    <AnimatedGasAmount valueUsdc6={totalBalanceUsdc6} />
+                    <small>USDC</small>
+                  </p>
+                  <p className="gt-hero-note">
+                    {isEmpty
+                      ? "Empty — auto-execution needs gas to run your plans."
+                      : isLow
+                        ? `Running low: about ${runsLeft} run${runsLeft === 1 ? "" : "s"} left. Top up before it stops.`
+                        : `Enough for about ${runsLeft > 999 ? "999+" : runsLeft} more scheduled run${runsLeft === 1 ? "" : "s"}.`}
+                  </p>
+                </div>
+                {(isEmpty || isLow) && (
+                  <span className={`gt-flag gt-flag-${tone}`}>
+                    <svg fill="none" stroke="currentColor" strokeWidth="2.1" viewBox="0 0 24 24" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.3 3.9L2 18a2 2 0 001.7 3h16.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" />
+                    </svg>
+                    {isEmpty ? "Empty" : "Low"}
+                  </span>
                 )}
-              </div>
-            </div>
-          )}
+              </section>
+            )}
 
-          {error && (
-            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{error}</p>
-          )}
-          {success && (
-            <p className="rounded-lg bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-400">{success}</p>
-          )}
+            {/* ---------- Where it is held ---------- */}
+            {breakdown.length > 0 && (
+              <section className="gt-nets">
+                <div className="gt-nets-head">
+                  <p className="gt-section-label">By network</p>
+                  <span className="gt-nets-hint">held per network · spent as one</span>
+                </div>
+                <ul className="gt-nets-list">
+                  {breakdown.map((c, i) => {
+                    const width =
+                      maxShare > 0n && c.amount > 0n
+                        ? Math.max(6, Number((c.amount * 100n) / maxShare))
+                        : 0;
+                    return (
+                      <li
+                        key={c.chainId}
+                        className={`gt-net${freshChainId === c.chainId ? " is-fresh" : ""}${c.amount === 0n ? " is-empty" : ""}`}
+                        style={{ ["--i" as string]: i }}
+                      >
+                        <ChainMark chainId={c.chainId} className="gt-net-mark" />
+                        <span className="gt-net-name">{CHAIN_NAMES[c.chainId] ?? `Chain ${c.chainId}`}</span>
+                        <span className="gt-net-bar" aria-hidden>
+                          <span className="gt-net-fill" style={{ ["--w" as string]: `${width}%` }} />
+                        </span>
+                        <span className="gt-net-amt">{gasAmountFromUsdc6(c.amount)}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
+
+            {/* ---------- Top up ---------- */}
+            <section className="gt-topup">
+              <p className="gt-section-label">Top up</p>
+
+              <ChainSelect
+                selectedChainId={selectedChainId}
+                chainIds={chainsWithGasTank}
+                byChain={byChain}
+                onSelect={(cid) => {
+                  setSelectedChainId(cid);
+                  setError(null);
+                }}
+                disabled={isBusy}
+              />
+
+              {!hasGasTank ? (
+                <p className="gt-hint gt-hint-warn">
+                  No gas tank is deployed on this network yet — pick another one.
+                </p>
+              ) : (
+                <>
+                  <div className="gt-amount">
+                    <span className="gt-amount-prefix" aria-hidden>$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      value={amount}
+                      disabled={isBusy}
+                      onChange={(e) => {
+                        setAmount(e.target.value);
+                        setError(null);
+                      }}
+                      className="gt-amount-input"
+                      aria-label="Amount of USDC to deposit"
+                    />
+                    <button
+                      type="button"
+                      className="gt-max"
+                      disabled={isBusy || walletUsdc === 0n}
+                      onClick={() => setAmount(formatUnits(walletUsdc, 6))}
+                    >
+                      Max
+                    </button>
+                  </div>
+
+                  <div className="gt-quick">
+                    {QUICK_AMOUNTS.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => {
+                          setAmount(String(preset));
+                          setError(null);
+                        }}
+                        aria-pressed={amount === String(preset)}
+                        className="gt-quick-btn"
+                      >
+                        ${preset}
+                      </button>
+                    ))}
+                    <span className="gt-quick-note">
+                      {usdcBalance ? `${gasAmountFromUsdc6(walletUsdc)} USDC in wallet` : " "}
+                    </span>
+                  </div>
+
+                  {amountWei > 0n && !overBalance && (
+                    <p className="gt-hint gt-hint-good">
+                      <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Buys about <b>{runsBought > 9999 ? "9,999+" : runsBought.toLocaleString("en-US")}</b> scheduled runs
+                      {" "}({formatGasAmount(Number(formatUnits(costPerRunUsdc6, 6)))} USDC each).
+                    </p>
+                  )}
+                  {overBalance && (
+                    <p className="gt-hint gt-hint-warn">
+                      That is more than the {gasAmountFromUsdc6(walletUsdc)} USDC you hold on{" "}
+                      {CHAIN_NAMES[selectedChainId] ?? "this network"}.
+                    </p>
+                  )}
+                </>
+              )}
+            </section>
+          </div>
+
+          {/* Footer */}
+          <div className="gt-foot">
+            <p className="gt-foot-hint">
+              {needsApproval && amountWei > 0n
+                ? "Approval and deposit run back to back — your wallet will ask twice."
+                : "Gas is deducted per run, on whichever network has a balance."}
+            </p>
+            <button type="button" onClick={onClose} disabled={isBusy} className="ss-btn ss-btn-soft">
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleTopUp()}
+              disabled={!canSubmit}
+              data-loading={isBusy ? "true" : undefined}
+              className="ss-btn ss-btn-primary ss-btn-glow"
+            >
+              {isBusy ? "Working…" : buttonLabel}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Progress — one step is active, and it is the one really happening */}
+      {stage && (
+        <div className="dm-prog" role="dialog" aria-modal="true" aria-label="Topping up gas tank">
+          <div className="dm-veil" aria-hidden />
+
+          <div className="dm-prog-card">
+            <span className="dm-prog-aura" aria-hidden />
+
+            {stage === "done" ? (
+              <div className="gt-done">
+                <span className="gt-done-mark" aria-hidden>
+                  <svg fill="none" stroke="currentColor" strokeWidth="2.6" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="gt-done-ring" />
+                  <span className="gt-done-ring gt-done-ring-b" />
+                </span>
+                <p className="gt-done-title">Tank topped up</p>
+                <p className="gt-done-amount">
+                  +{gasAmountFromUsdc6(addedUsdc6)} <small>USDC</small>
+                </p>
+                <p className="gt-done-sub">
+                  New balance <b>{gasAmountFromUsdc6(totalBalanceUsdc6)} USDC</b> — updated everywhere.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="dm-prog-head">
+                  <span className="dm-prog-orb" aria-hidden>
+                    <GasTankIcon />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="dm-prog-title">Topping up your tank…</p>
+                    <p className="dm-prog-sub">Keep this window open until every step is done.</p>
+                  </div>
+                </div>
+
+                <ol className="dm-steps">
+                  {steps.map((step, i) => {
+                    const done = stageIndex > i;
+                    const active = stageIndex === i;
+                    return (
+                      <li
+                        key={step.id}
+                        className={`dm-step ${done ? "dm-step-done" : ""} ${active ? "dm-step-active" : ""}`}
+                        aria-current={active ? "step" : undefined}
+                      >
+                        <span className="dm-step-dot" aria-hidden>
+                          {done ? (
+                            <svg fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          ) : (
+                            i + 1
+                          )}
+                        </span>
+                        <span className="dm-step-copy">
+                          <span className="dm-step-label">{step.label}</span>
+                          <span className="dm-step-note">{step.note}</span>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+
+                {txHash && (
+                  <div className="dm-prog-tx">
+                    <p className="dm-prog-tx-label">Transaction</p>
+                    <p className="dm-prog-tx-hash">{txHash}</p>
+                  </div>
+                )}
+
+                <p className="dm-prog-foot">
+                  Your wallet may ask you to confirm more than once — that&apos;s each step above.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

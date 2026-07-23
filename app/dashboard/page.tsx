@@ -13,6 +13,8 @@ import { DashboardPlans } from "../components/dashboard/DashboardPlans";
 import { DashboardStats } from "../components/dashboard/DashboardStats";
 import { DashboardStatsProvider } from "../components/dashboard/DashboardStatsContext";
 import { NewDcaModal } from "../components/dashboard/NewDcaModal";
+import { GasTankButton } from "../components/dashboard/GasTankButton";
+import { GasTankModalProvider } from "../contexts/GasTankModalContext";
 import { useContracts } from "../hooks";
 import { useDashboardStore } from "../store/useDashboardStore";
 import { DASHBOARD_REFRESH_EVENT } from "@/lib/dashboard-refresh-event";
@@ -98,7 +100,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <>
+    <GasTankModalProvider>
       <Header />
       <main className="landing-pattern-bg dashboard-main dashboard-surface min-h-screen overflow-hidden border-t border-[var(--hero-muted)]/10 pt-[5.5rem]">
         <div className="dashboard-orb dashboard-orb-one" aria-hidden />
@@ -108,6 +110,7 @@ export default function DashboardPage() {
             <div className="dashboard-toolbar">
               <p>Overview</p>
               <div className="flex flex-wrap items-center gap-2">
+                <GasTankButton />
                 <DashboardRefreshButton />
                 <Link
                   href="/"
@@ -141,6 +144,6 @@ export default function DashboardPage() {
           <NewDcaModal open={newDcaOpen} onClose={() => setNewDcaOpen(false)} />
         </div>
       </main>
-    </>
+    </GasTankModalProvider>
   );
 }

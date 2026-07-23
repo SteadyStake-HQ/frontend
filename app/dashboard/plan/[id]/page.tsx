@@ -14,6 +14,7 @@ import { LoadingCard } from "@/app/components/LoadingComponents";
 import { REVERSE_FREQUENCY_MAP } from "@/lib/constants";
 import { getTokenLogoUrl } from "@/lib/token-logo";
 import { useSupportedTokens } from "@/app/hooks/useSupportedTokens";
+import type { PlanAdminControl } from "@/app/store/useDashboardStore";
 
 type PlanStatus = "active" | "cancelled" | "ended";
 
@@ -43,6 +44,8 @@ interface BackendPlanTiming {
   dueTimestamp: number;
   ready: boolean;
   executionMode: "auto" | "manual" | null;
+  /** Admin hold stopping auto-execution; null when nothing is holding the plan. */
+  adminControl: PlanAdminControl | null;
 }
 
 /* ---------- formatting ---------------------------------------------------- */
@@ -298,6 +301,7 @@ export default function PlanPage() {
             dueTimestamp: number;
             ready: boolean;
             executionMode: "auto" | "manual" | null;
+            adminControl: PlanAdminControl | null;
           }>;
         };
         const timing = data.plans?.find(
@@ -310,6 +314,7 @@ export default function PlanPage() {
             dueTimestamp: timing.dueTimestamp,
             ready: timing.ready,
             executionMode: timing.executionMode,
+            adminControl: timing.adminControl ?? null,
           });
         }
       } catch {
@@ -471,10 +476,20 @@ export default function PlanPage() {
   }
 
   const logo = plan.tokenLogoUrl ?? logoUrlFallback;
-  const statusLabel =
-    plan.status === "ended" ? "Completed" : plan.status === "cancelled" ? "Cancelled" : "Active";
-  const statusClass =
-    plan.status === "ended"
+  // Only meaningful while the plan can still run; a finished plan has no automation left to hold.
+  const hold = plan.status === "active" ? backendPlanTiming?.adminControl ?? null : null;
+  const statusLabel = hold
+    ? hold.status === "paused"
+      ? "Admin paused"
+      : "Admin stopped"
+    : plan.status === "ended"
+      ? "Completed"
+      : plan.status === "cancelled"
+        ? "Cancelled"
+        : "Active";
+  const statusClass = hold
+    ? "status-badge-held"
+    : plan.status === "ended"
       ? "status-badge-ended"
       : plan.status === "cancelled"
         ? "status-badge-cancelled"
@@ -519,7 +534,7 @@ export default function PlanPage() {
           </div>
 
           <div className="pl-badges">
-            {isEnrolledForAutoExecution && (
+            {isEnrolledForAutoExecution && !hold && (
               <span className="pl-badge pl-badge-auto" title="Executed automatically by the SteadyStake executor">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -528,7 +543,7 @@ export default function PlanPage() {
               </span>
             )}
             <span
-              className={`pl-badge ${statusClass} ${plan.status === "active" ? "pl-badge-live" : ""}`}
+              className={`pl-badge ${statusClass} ${plan.status === "active" && !hold ? "pl-badge-live" : ""}`}
             >
               <span className="pl-badge-dot" aria-hidden />
               {statusLabel}
@@ -595,7 +610,9 @@ export default function PlanPage() {
           </dl>
         </div>
 
-        {plan.status === "active" && (
+        {/* A countdown promises the plan fires at zero. While a hold is in force it will not, so
+            the counter stands down and the hold notice below takes its place. */}
+        {plan.status === "active" && !hold && (
           <div className="pl-next">
             <span className={`pl-next-icon ${isDue ? "is-due" : ""}`} aria-hidden>
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -621,7 +638,30 @@ export default function PlanPage() {
         )}
 
         <div className="pl-actions">
-          {plan.status === "active" && address ? (
+          {plan.status === "active" && hold ? (
+            <>
+              <div className="pl-closed pl-closed-held" role="status">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <circle cx="12" cy="12" r="9" strokeWidth={2} />
+                  <path strokeLinecap="round" strokeWidth={2} d="M9.5 9.5v5M14.5 9.5v5" />
+                </svg>
+                <span>
+                  <b>
+                    {hold.status === "paused"
+                      ? "An admin paused this plan."
+                      : "An admin stopped automation for this plan."}
+                  </b>{" "}
+                  Automatic buys are on hold — please contact the admin.
+                  {hold.reason ? (
+                    <span className="pl-closed-reason">Reason: {hold.reason}</span>
+                  ) : null}
+                </span>
+              </div>
+              {/* The hold is off-chain and never touches the deposit, so the owner keeps the one
+                  action that is unambiguously theirs: cancelling and taking their USDC back. */}
+              {address && <CancelScheduleButton scheduleId={scheduleId} />}
+            </>
+          ) : plan.status === "active" && address ? (
             <>
               <ExecuteSwapButton
                 userAddress={address}

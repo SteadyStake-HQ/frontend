@@ -6,6 +6,7 @@ import { useChainId, usePublicClient } from "wagmi";
 import { useDCAVault, useDCASchedule, useContracts } from "@/app/hooks";
 import { calculateEarlyFee, shouldChargeEarlyFee } from "@/lib/constants";
 import { formatUnits } from "viem";
+import { parseTxError } from "@/lib/parse-tx-error";
 
 interface CancelScheduleButtonProps {
   scheduleId: bigint;
@@ -80,7 +81,7 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
       const { invalidateDcaDashboardQueries } = await import("@/lib/invalidate-dca-queries");
       await invalidateDcaDashboardQueries(queryClient);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to cancel schedule");
+      setError(parseTxError(err, "Failed to cancel schedule"));
     } finally {
       setIsSubmitting(false);
     }
