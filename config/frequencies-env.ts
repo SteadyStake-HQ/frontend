@@ -5,7 +5,7 @@
  */
 
 const LABELS: Record<number, string> = {
-  0: "1 Minute",
+  0: "1 Minute (Test)",
   1: "Daily",
   2: "Weekly",
   3: "Bi-weekly",

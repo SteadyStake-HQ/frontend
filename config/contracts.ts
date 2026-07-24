@@ -546,8 +546,17 @@ export function getContracts(chainId: number): ChainContracts | null {
   return null;
 }
 
-/** Default chain (first in NEXT_PUBLIC_SUPPORTED_CHAIN_IDS, or Base mainnet) */
-export const DEFAULT_CHAIN_ID = SUPPORTED_CHAIN_IDS[0] ?? 8453;
+/**
+ * Default chain: the first supported chain that actually has deployed contracts.
+ * BOT mainnet (677) leads the switcher (botChainFirst) but may not be deployed yet —
+ * it must not become the app-wide contract fallback, or CONTRACTS below would be null
+ * and every consumer that isn't connected to a deployed chain would crash. Skip chains
+ * missing from deployed-addresses.json.
+ */
+export const DEFAULT_CHAIN_ID =
+  SUPPORTED_CHAIN_IDS.find((id) => getContracts(id) !== null) ??
+  SUPPORTED_CHAIN_IDS[0] ??
+  8453;
 
 /** Contracts for default chain (Base mainnet). Use getContracts(chainId) when chain is known. */
 export const CONTRACTS: ChainContracts = getContracts(DEFAULT_CHAIN_ID)!;
