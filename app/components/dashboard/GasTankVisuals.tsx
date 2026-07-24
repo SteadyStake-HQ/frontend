@@ -27,12 +27,14 @@ export function usePrefersReducedMotion(): boolean {
 
 /**
  * Gas is cents-scale — 0.001 per run on cheap networks. A flat 2dp renders a 0.025 balance as
- * "0.03", which reads as if nothing was ever spent, so widen the precision below 0.1.
+ * "0.03", which reads as if nothing was ever spent, so the tank is quoted to 4dp throughout.
+ * The precision used to widen only below 0.1, which meant a 12.3456 balance still lost its
+ * fraction — the drain from a single run was invisible on any tank with real money in it.
  */
 export function formatGasAmount(n: number): string {
   return n.toLocaleString("en-US", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: n > 0 && n < 0.1 ? 4 : 2,
+    maximumFractionDigits: 4,
   });
 }
 

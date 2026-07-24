@@ -167,6 +167,15 @@ const ALL_CHAINS = [
   { ...polygon, iconUrl: CHAIN_ICON_URLS[polygon.id], iconBackground: "#8247E5" },
 ] as const;
 
+/**
+ * Ticker of the token network fees are actually paid in. The gas tank is denominated in USDC but
+ * the relayer pays in this, so anything explaining the per-run price has to name it.
+ * Falls back to "the native token" rather than guessing ETH for an unlisted chain.
+ */
+export function getNativeSymbol(chainId: number): string {
+  return ALL_CHAINS.find((c) => c.id === chainId)?.nativeCurrency.symbol ?? "the native token";
+}
+
 /** Ethereum Sepolia: use PublicNode RPC; default rpc.sepolia.org often times out (522). */
 const ETH_SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com";
 

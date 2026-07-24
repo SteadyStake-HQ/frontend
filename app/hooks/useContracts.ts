@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useChainId } from "wagmi";
 import {
   getContracts,
@@ -20,7 +21,13 @@ export function useContracts(): {
 } {
   const chainId = useChainId();
   const resolvedChainId = chainId ?? DEFAULT_CHAIN_ID;
-  const contracts = getContracts(resolvedChainId) ?? CONTRACTS;
+  // getContracts builds a fresh object per call, so without this every consumer's useCallback that
+  // closes over `contracts` gets a new identity each render — enough to re-fire effects that depend
+  // on those callbacks. The addresses only ever change with the chain.
+  const contracts = useMemo(
+    () => getContracts(resolvedChainId) ?? CONTRACTS,
+    [resolvedChainId],
+  );
   return {
     chainId: resolvedChainId,
     contracts,

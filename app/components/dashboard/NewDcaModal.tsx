@@ -5,7 +5,7 @@ import { toast } from "react-toastify";
 import { useAccount, useBalance, useReadContract, useReadContracts, useWaitForTransactionReceipt } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDCAVault, useDCAVaultRead, useTokenApproval, useTokenAllowance, useContracts, useGasTank, useGasTankAllChains, useGasTankLevel, useGasTankRefresh, useGasCostPerExecutionForChain, requiredGasUsdc6Exact } from "@/app/hooks";
-import { GasTankGauge } from "./GasTankVisuals";
+import { GasTankGauge, formatGasAmount } from "./GasTankVisuals";
 import { getGasCostPerRunUsd } from "@/config/gas-cost-env";
 import { CHAIN_NAMES, FREQUENCY_MAP } from "@/lib/constants";
 import { useSupportedTokens } from "@/app/hooks/useSupportedTokens";
@@ -39,14 +39,11 @@ const usd = (n: number, dp = 2) =>
 
 /**
  * Gas tank amounts, in USDC. Gas is cents-scale — 0.001/run on cheap chains — so a plain 2dp
- * format renders a 0.025 balance as "0.03" and makes a drained tank look untouched. Widen the
- * precision for small balances so the number on screen is the number on chain.
+ * format renders a 0.025 balance as "0.03" and makes a drained tank look untouched. Shares
+ * formatGasAmount with the tank pill and the top-up modal: the same balance is on screen in
+ * three places at once and it would read as three different numbers if each rounded its own way.
  */
-const gasUsdc = (n: number) =>
-  `${n.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: n > 0 && n < 0.1 ? 4 : 2,
-  })} USDC`;
+const gasUsdc = (n: number) => `${formatGasAmount(n)} USDC`;
 
 /** "in ~8 min" while a plan is short, a calendar date once it spans days. */
 function formatFinish(totalSeconds: number): string {
@@ -315,6 +312,13 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
   const useBatchedCreateRef = useRef(false);
   /** Gas amount to deposit to gas tank after create (when auto-exec); set at submit. */
   const requiredGasForPlanRef = useRef<bigint>(0n);
+  /**
+   * Create-tx hash whose post-confirm work has already been started. The post-create effect stays
+   * armed for the whole time its async body runs, and that body refetches the very reads its
+   * dependencies come from — without this guard it re-enters and asks the wallet to deposit to the
+   * gas tank again, once per render.
+   */
+  const postCreateHandledRef = useRef<string | null>(null);
 
   const { data: customTokenMeta, isLoading: isLoadingCustomToken, isError: isCustomTokenError } = useReadContracts({
     contracts: addingAddress
@@ -605,12 +609,15 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
       setPendingCreateTxHash(undefined);
       setStage(null);
       useBatchedCreateRef.current = false;
+      postCreateHandledRef.current = null;
     }
   }, [open]);
 
   // After createSchedule tx is confirmed on-chain, enroll for auto-execution if requested, then reload dashboard and close
   useEffect(() => {
     if (!pendingCreateTxHash || createReceipt?.status !== "success") return;
+    if (postCreateHandledRef.current === pendingCreateTxHash) return;
+    postCreateHandledRef.current = pendingCreateTxHash;
 
     const run = async () => {
       let scheduleId: bigint | null = null;
@@ -760,7 +767,11 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
 
     const totalAmount = (parseFloat(amountPerInterval) * runCountNum).toFixed(6);
     const totalAmountBig = parseUnits(totalAmount, 6);
-    const gasNeededAtCreate = enableAutoExec && hasGasTank && requiredGasForPlan > 0n ? requiredGasForPlan : 0n;
+    // Only pull gas from the wallet when the user chose to fund fresh ("deposit"). Picking
+    // "Existing balance" (effectiveGasSource === "tank") must leave the tank alone — the relayer
+    // deducts per run. This mirrors `gasAddedAtCreate`, which drives the receipt; keeping the two
+    // in sync is what stops a "tank" plan from silently topping the tank up. See gasAddedAtCreate.
+    const gasNeededAtCreate = gasAddedAtCreate ? requiredGasForPlan : 0n;
     const totalNeeded = totalAmountBig + gasNeededAtCreate;
 
     // Check balance (plan + gas when auto-exec adds gas at create)
