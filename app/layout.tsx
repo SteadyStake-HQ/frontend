@@ -111,7 +111,7 @@ export const metadata: Metadata = {
       "Multi-chain non-custodial DCA, powered by BOT Chain. Fund your plan + Gas Tank, we execute on schedule. BOT Chain, BNB Chain, Base, Polygon, Kava. steadystake.org",
     images: [
       {
-        url: "/Logo.jpeg",
+        url: "/og-image.png",
         width: 1200,
         height: 630,
         alt: "SteadyStake - Automated Crypto Savings",
@@ -123,7 +123,7 @@ export const metadata: Metadata = {
     title: "SteadyStake – Non-Custodial DCA Across Chains",
     description:
       "Multi-chain non-custodial DCA, powered by BOT Chain. Fund DCA + Gas Tank, we execute on schedule. BOT Chain, BNB Chain, Base, Polygon, Kava. steadystake.org",
-    images: ["/Logo.jpeg"],
+    images: ["/og-image.png"],
   },
   robots: {
     index: true,
