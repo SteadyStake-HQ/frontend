@@ -18,8 +18,11 @@ import { GAS_UNITS_PER_RUN } from "@/config/gas-cost-env";
  * figure comes from, and shows honestly when the network has drifted away from it.
  */
 
-/** Where a quoted price came from. Shown to the user: an operator-set price is not a market one. */
-export type PriceSource = "override" | "coingecko" | null;
+/**
+ * Where a quoted price came from. Shown to the user: an operator-set price is not a market one.
+ * "botdex" is BOT Chain's own DEX pool (mainnet BOT), "static" is a pinned testnet rate.
+ */
+export type PriceSource = "override" | "coingecko" | "botdex" | "static" | null;
 
 /** USD price of a chain's native token; null while loading or where no feed quotes it. */
 export function useNativePriceUsd(chainId: number | undefined): {

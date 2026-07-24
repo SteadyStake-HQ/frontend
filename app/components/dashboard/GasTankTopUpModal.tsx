@@ -227,9 +227,13 @@ function RunCostExplainer({
                 <span>
                   {nativeSource === "coingecko"
                     ? "coingecko"
-                    : nativeSource === "override"
-                      ? "set rate"
-                      : "no feed"}
+                    : nativeSource === "botdex"
+                      ? "bot dex"
+                      : nativeSource === "override"
+                        ? "set rate"
+                        : nativeSource === "static"
+                          ? "testnet rate"
+                          : "no feed"}
                 </span>
               </dt>
               <dd>
