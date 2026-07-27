@@ -84,7 +84,15 @@ export async function GET() {
     networks: staticNetworks(),
   };
 
-  if (!SCHEDULER_API_URL) return NextResponse.json(fallback);
+  if (!SCHEDULER_API_URL) {
+    // Silent here would mean an operator pausing a network in the dashboard and seeing nothing
+    // change in the app, with no clue why — the fallback list says every network is in service.
+    console.warn(
+      "SCHEDULER_API_URL is not set: serving the build's own network list. " +
+        "Network pauses and removals made in the operator dashboard will NOT reach the frontend.",
+    );
+    return NextResponse.json(fallback);
+  }
 
   const query = NETWORK_TYPE === "all" ? "" : `?type=${encodeURIComponent(NETWORK_TYPE)}`;
 

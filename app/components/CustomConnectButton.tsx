@@ -1,6 +1,7 @@
 "use client";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useNetworkSwitcher } from "@/app/contexts/NetworkSwitcherContext";
 
 function truncateAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
@@ -30,6 +31,8 @@ export function CustomConnectButton({
 }: CustomConnectButtonProps) {
   const isSmall = size === "sm";
   const padding = isSmall ? "ss-btn-sm h-10 text-sm" : "ss-btn-lg";
+  // Our own switcher, not RainbowKit's: the list has to reflect what the operator has allocated.
+  const { openNetworkSwitcher } = useNetworkSwitcher();
 
   return (
     <ConnectButton.Custom>
@@ -37,7 +40,6 @@ export function CustomConnectButton({
         account,
         chain,
         openAccountModal,
-        openChainModal,
         openConnectModal,
         mounted,
       }) => {
@@ -88,7 +90,7 @@ export function CustomConnectButton({
           return (
             <button
               type="button"
-              onClick={openChainModal}
+              onClick={openNetworkSwitcher}
               className={`${baseButton} ${padding} border border-amber-500/50 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-400 ${className ?? ""}`}
             >
               <svg

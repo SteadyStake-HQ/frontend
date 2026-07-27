@@ -29,6 +29,7 @@ import {
 } from "@/app/hooks/useRunCost";
 import { CHAIN_ICON_URLS, getNativeSymbol } from "@/config/wagmi";
 import { CHAIN_NAMES } from "@/lib/constants";
+import { useNetworkAllocation } from "@/app/hooks/useNetworkAllocation";
 import { formatUnits, parseUnits } from "viem";
 import { parseTxError } from "@/lib/parse-tx-error";
 import {
@@ -445,24 +446,35 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
    * the first configured chain, which is what the rest of the app reads too (useContracts).
    */
   const activeChainId = useChainId();
-  const chainsWithGasTank = useMemo(() => getChainsWithGasTank(), []);
+  const allocation = useNetworkAllocation();
   /**
-   * Every network the build supports, fundable ones first. The selector offers all of them so the
-   * breakdown can quote any network the app runs plans on; ordering keeps the ones you can
-   * actually top up at the top of the list rather than scattered through it.
+   * Fundable *and* in service. A paused network is closed to every feature, funding its tank
+   * included, so it is not offered here even from a network that is live.
+   */
+  const chainsWithGasTank = useMemo(
+    () => getChainsWithGasTank().filter((cid) => allocation.acceptsNewPlans(cid)),
+    [allocation],
+  );
+  /**
+   * Every network the build supports and the operator has in service, fundable ones first. The
+   * selector offers all of them so the breakdown can quote any network the app runs plans on;
+   * ordering keeps the ones you can actually top up at the top of the list rather than scattered
+   * through it.
    */
   const selectableChains = useMemo(
     () => [
       ...chainsWithGasTank,
-      ...SUPPORTED_CHAIN_IDS.filter((cid) => !chainsWithGasTank.includes(cid)),
+      ...SUPPORTED_CHAIN_IDS.filter(
+        (cid) => !chainsWithGasTank.includes(cid) && allocation.acceptsNewPlans(cid),
+      ),
     ],
-    [chainsWithGasTank],
+    [chainsWithGasTank, allocation],
   );
   const { totalBalanceUsdc6, byChain } = useGasTankAllChains();
   const refreshGasTank = useGasTankRefresh();
 
   const [selectedChainId, setSelectedChainId] = useState<number>(
-    chainsWithGasTank[0] ?? SUPPORTED_CHAIN_IDS[0] ?? 84532,
+    chainsWithGasTank[0] ?? selectableChains[0] ?? SUPPORTED_CHAIN_IDS[0] ?? 84532,
   );
   const [amount, setAmount] = useState("");
   const [error, setError] = useState<string | null>(null);

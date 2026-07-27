@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useChainModal } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
 import { CHAIN_ICON_URLS } from "@/config/wagmi";
 import { useNetworkAllocation } from "@/app/hooks/useNetworkAllocation";
+import { useNetworkSwitcher } from "@/app/contexts/NetworkSwitcherContext";
 import { CustomConnectButton } from "./CustomConnectButton";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
@@ -50,7 +50,7 @@ function StartDCAIcon({ className }: { className?: string }) {
 }
 
 function SwitchNetworkButton({ large = false }: { large?: boolean }) {
-  const { openChainModal } = useChainModal();
+  const { openNetworkSwitcher } = useNetworkSwitcher();
   const { chain, isConnected } = useAccount();
   const allocation = useNetworkAllocation();
   const [mounted, setMounted] = useState(false);
@@ -95,7 +95,7 @@ function SwitchNetworkButton({ large = false }: { large?: boolean }) {
   return (
     <button
       type="button"
-      onClick={openChainModal}
+      onClick={openNetworkSwitcher}
       className={btnClass}
       title={title}
       aria-label={title}

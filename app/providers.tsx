@@ -8,6 +8,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { config } from "@/config/wagmi";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { NetworkThemeSync } from "./components/NetworkThemeSync";
+import { NetworkSwitcherProvider } from "./contexts/NetworkSwitcherContext";
 import "@rainbow-me/rainbowkit/styles.css";
 
 const queryClient = new QueryClient();
@@ -26,7 +27,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <ThemeProvider>
           <RainbowKitProvider theme={rainbowTheme}>
             <NetworkThemeSync />
-            {children}
+            <NetworkSwitcherProvider>{children}</NetworkSwitcherProvider>
             <ToastContainer
               position="bottom-center"
               newestOnTop

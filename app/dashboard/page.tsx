@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useAccount } from "wagmi";
 import { ConnectWalletGate } from "../components/dashboard/ConnectWalletGate";
+import { NetworkOutOfServiceGate } from "../components/dashboard/NetworkOutOfServiceGate";
 import { DashboardWelcome } from "../components/dashboard/DashboardWelcome";
 import { DashboardRefreshButton } from "../components/dashboard/DashboardRefreshButton";
 import { Header } from "../components/Header";
@@ -15,7 +16,7 @@ import { DashboardStatsProvider } from "../components/dashboard/DashboardStatsCo
 import { NewDcaModal } from "../components/dashboard/NewDcaModal";
 import { GasTankButton } from "../components/dashboard/GasTankButton";
 import { GasTankModalProvider } from "../contexts/GasTankModalContext";
-import { useContracts } from "../hooks";
+import { useContracts, useNetworkAllocation } from "../hooks";
 import { useDashboardStore } from "../store/useDashboardStore";
 import { DASHBOARD_REFRESH_EVENT } from "@/lib/dashboard-refresh-event";
 
@@ -24,8 +25,9 @@ const getClientHydrationSnapshot = () => true;
 const getServerHydrationSnapshot = () => false;
 
 export default function DashboardPage() {
-  const { isConnected, address, status } = useAccount();
+  const { isConnected, address, status, chain } = useAccount();
   const { chainId } = useContracts();
+  const allocation = useNetworkAllocation();
   const [newDcaOpen, setNewDcaOpen] = useState(false);
   const hydrated = useSyncExternalStore(
     subscribeToHydration,
@@ -37,9 +39,20 @@ export default function DashboardPage() {
   const isWalletResolving =
     !hydrated || status === "connecting" || status === "reconnecting";
 
+  /**
+   * The wallet is on a network the operator has paused or removed. The dashboard is closed there
+   * outright — see NetworkOutOfServiceGate — so nothing below fetches for it either: a closed
+   * network must not be quietly polled for plans and balances in the background.
+   *
+   * `acceptsNewPlans` answers optimistically until the allocation has loaded, so a user on a live
+   * network never sees the gate flash on the way in.
+   */
+  const outOfService =
+    isConnected && chain?.id != null && !allocation.acceptsNewPlans(chain.id);
+
   useEffect(() => {
     if (isWalletResolving) return;
-    if (!isConnected || !address || chainId == null) {
+    if (!isConnected || !address || chainId == null || outOfService) {
       useDashboardStore.getState().resetDashboardData();
       lastFetchKeyRef.current = "";
       return;
@@ -49,10 +62,10 @@ export default function DashboardPage() {
     if (lastFetchKeyRef.current === key) return;
     lastFetchKeyRef.current = key;
     void useDashboardStore.getState().fetchDashboardData({ address, chainId, force: true });
-  }, [isWalletResolving, isConnected, address, chainId]);
+  }, [isWalletResolving, isConnected, address, chainId, outOfService]);
 
   useEffect(() => {
-    if (isWalletResolving || !isConnected || !address || chainId == null) return;
+    if (isWalletResolving || !isConnected || !address || chainId == null || outOfService) return;
 
     const onRefresh = () => {
       void useDashboardStore.getState().fetchDashboardData({ address, chainId, force: true });
@@ -60,10 +73,10 @@ export default function DashboardPage() {
 
     window.addEventListener(DASHBOARD_REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(DASHBOARD_REFRESH_EVENT, onRefresh);
-  }, [isWalletResolving, isConnected, address, chainId]);
+  }, [isWalletResolving, isConnected, address, chainId, outOfService]);
 
   useEffect(() => {
-    if (isWalletResolving || !isConnected || !address || chainId == null) return;
+    if (isWalletResolving || !isConnected || !address || chainId == null || outOfService) return;
 
     const id = window.setInterval(() => {
       const hasActivePlan = useDashboardStore
@@ -79,7 +92,7 @@ export default function DashboardPage() {
     }, 5_000);
 
     return () => window.clearInterval(id);
-  }, [isWalletResolving, isConnected, address, chainId]);
+  }, [isWalletResolving, isConnected, address, chainId, outOfService]);
 
   if (isWalletResolving) {
     return (
@@ -95,6 +108,22 @@ export default function DashboardPage() {
       <div className="flex h-screen flex-col overflow-hidden">
         <Header />
         <ConnectWalletGate />
+      </div>
+    );
+  }
+
+  // Nothing of the dashboard is mounted on a closed network — not the plans, not the charts, not the
+  // gas tank, not the new-plan modal. Returning before GasTankModalProvider is the point: no feature
+  // exists to be reached while the wallet is here.
+  if (outOfService && chain) {
+    return (
+      <div className="flex h-screen flex-col overflow-hidden">
+        <Header />
+        <NetworkOutOfServiceGate
+          chainName={chain.name}
+          paused={allocation.isPaused(chain.id)}
+          note={allocation.note(chain.id)}
+        />
       </div>
     );
   }
