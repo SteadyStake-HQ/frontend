@@ -4,9 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { useAccount, useBalance, useReadContract, useReadContracts, useWaitForTransactionReceipt } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
-import { useDCAVault, useDCAVaultRead, useTokenApproval, useTokenAllowance, useContracts, useStableSymbol, useGasTank, useGasTankAllChains, useGasTankLevel, useGasTankRefresh, useGasCostPerExecutionForChain, requiredGasUsdc6Exact } from "@/app/hooks";
+import { useDCAVault, useDCAVaultRead, useTokenApproval, useTokenAllowance, useContracts, useStableSymbol, useGasTank, useGasTankAllChains, useGasTankLevel, useGasTankRefresh, useEffectiveRunPriceUsdc6, useNetworkAllocation } from "@/app/hooks";
 import { GasTankGauge, formatGasAmount } from "./GasTankVisuals";
-import { getGasCostPerRunUsd } from "@/config/gas-cost-env";
 import { CHAIN_NAMES, FREQUENCY_MAP } from "@/lib/constants";
 import { useSupportedTokens } from "@/app/hooks/useSupportedTokens";
 import { DCA_VAULT_ABI, ERC20_ABI } from "@/config/abis";
@@ -266,6 +265,11 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
   const stable = useStableSymbol();
   const gasUsdc = (n: number) => gasAmountLabel(n, stable);
   const queryClient = useQueryClient();
+  /**
+   * A network an operator has paused or removed still shows the user's existing plans — they must be
+   * able to cancel and withdraw — but it takes no new ones.
+   */
+  const allocation = useNetworkAllocation();
   const { tokens: tokensList, isLoading: isLoadingTokens } = useSupportedTokens(chainId);
   const [token, setToken] = useState<string>("");
   const [amountPerInterval, setAmountPerInterval] = useState("");
@@ -504,13 +508,13 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
     amountPerInterval && runCountNum >= 1
       ? parseUnits((parseFloat(amountPerInterval) * runCountNum).toFixed(6), 6)
       : 0n;
-  const gasCostPerExecutionUsdc6 = useGasCostPerExecutionForChain(chainId ?? 0);
-  const requiredGasForPlan =
-    totalRuns > 0 && chainId
-      ? gasCostPerExecutionUsdc6 > 0n
-        ? gasCostPerExecutionUsdc6 * BigInt(totalRuns)
-        : requiredGasUsdc6Exact(totalRuns, chainId)
-      : 0n;
+  /**
+   * What one run will charge on this network — the operator's flat rate where one is set, the
+   * GasTank's own rate otherwise. The same hook the top-up modal and the tank gauge use, so a plan
+   * cannot be prepaid at one price and then executed at another.
+   */
+  const { usdc6: costPerRunUsdc6 } = useEffectiveRunPriceUsdc6(chainId);
+  const requiredGasForPlan = totalRuns > 0 && chainId ? costPerRunUsdc6 * BigInt(totalRuns) : 0n;
   /** The tank already holds enough — across all networks — to run this plan end to end. */
   const tankCoversPlan = requiredGasForPlan > 0n && gasTankBalance >= requiredGasForPlan;
   const effectiveGasSource: "tank" | "deposit" = gasFundingSource ?? (tankCoversPlan ? "tank" : "deposit");
@@ -553,12 +557,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
   } = useGasTankLevel(gasTankBalance, chainId);
   const tankTone: "ok" | "low" | "empty" = tankIsEmpty ? "empty" : tankIsLow ? "low" : "ok";
   const requiredGasFormatted = requiredGasForPlan > 0n ? Number(formatUnits(requiredGasForPlan, 6)) : 0;
-  const costPerRunUsd =
-    gasCostPerExecutionUsdc6 > 0n
-      ? Number(formatUnits(gasCostPerExecutionUsdc6, 6))
-      : chainId
-        ? getGasCostPerRunUsd(chainId)
-        : 0.01;
+  const costPerRunUsd = Number(formatUnits(costPerRunUsdc6, 6));
 
   /**
    * Which network's tank the relayer will actually charge for the first run. Mirrors
@@ -566,9 +565,6 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
    * otherwise the richest chain that can. Balances are global — a plan on one network can be
    * paid for out of another network's tank — so say which one, rather than let the user guess.
    */
-  const costPerRunUsdc6 = gasCostPerExecutionUsdc6 > 0n
-    ? gasCostPerExecutionUsdc6
-    : BigInt(Math.ceil(costPerRunUsd * 1_000_000));
   const gasPayingChainId: number | null = (() => {
     if (costPerRunUsdc6 <= 0n) return null;
     if (chainId && (gasTankByChain[chainId] ?? 0n) >= costPerRunUsdc6) return chainId;
@@ -955,12 +951,23 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
     return Math.max(14, Math.min(100, ramp + wobble[i % wobble.length]));
   });
   const isBusy = stage !== null || isSubmitting || isCreating || isApproving;
+  /** Operator has this network out of service: existing plans keep working, new ones are refused. */
+  const networkClosed = chainId != null && !allocation.acceptsNewPlans(chainId);
+  const networkNote = chainId != null ? allocation.note(chainId) : null;
   const canSubmit =
-    isConnected && hasPlan && Boolean(selectedTokenAddress) && hasEnoughBalanceForCreate && !isBusy;
+    isConnected &&
+    hasPlan &&
+    Boolean(selectedTokenAddress) &&
+    hasEnoughBalanceForCreate &&
+    !networkClosed &&
+    !isBusy;
 
   const footHint = !isConnected
     ? "Connect your wallet to create a plan."
-    : !amountNum
+    : networkClosed
+      ? networkNote ??
+        `New plans are paused on ${chainName ?? "this network"}. Your existing plans are unaffected — switch networks to start a new one.`
+      : !amountNum
       ? `Enter how much ${stable} to spend on each run.`
       : runCountNum < 1
         ? "Choose how many runs this plan should make."

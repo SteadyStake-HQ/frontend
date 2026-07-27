@@ -84,10 +84,19 @@ export const RECORD_EXECUTION_GAS_LIMIT = 100_000n;
 const SEED_GAS_UNITS_BY_CHAIN: Record<number, bigint> = {
   677: 260_000n, // BOT Chain mainnet, median of measured receipts rounded up
   968: 260_000n, // BOT Chain testnet — same contracts, same swap path
+  // Unrun chains, split by swap path rather than sharing one constant: a direct DEX adapter
+  // (the Sepolia mocks, BOT Chain) burns roughly what BOT Chain measured, a 0x aggregator route
+  // more. Both are labelled "estimated" in the UI until that chain's first run replaces them.
+  84532: 260_000n, // Base Sepolia — MockSwapRouter
+  11155111: 260_000n, // Ethereum Sepolia — MockSwapRouter
+  8453: 320_000n, // Base — 0x aggregator route
+  56: 320_000n, // BSC — 0x aggregator route
+  137: 320_000n, // Polygon — 0x aggregator route
+  2222: 320_000n, // Kava — 0x aggregator route
 };
 
 /** Seed for a chain that has neither measurements nor an entry above. */
-const DEFAULT_SEED_GAS_UNITS = 250_000n;
+const DEFAULT_SEED_GAS_UNITS = 320_000n;
 
 /** Gas units per run to assume for a chain before the backend has measured one. */
 export function getSeedGasUnitsPerRun(chainId: number | undefined): bigint {

@@ -42,6 +42,30 @@ export function gasAmountFromUsdc6(raw: bigint): string {
   return formatGasAmount(Number(formatUnits(raw, 6)));
 }
 
+/**
+ * What one run costs, in dollars. A balance is always worth quoting to the cent, but a run's price
+ * is not: on a network with sub-cent fees it is $0.0004, and formatGasAmount's four decimal places
+ * round the cheapest chains to "0.00" — a price of zero, which is the one thing it is not. Below a
+ * cent this falls back to significant digits so a small number stays a number.
+ */
+export function formatRunCostUsd(n: number): string {
+  if (n >= 0.01) return formatGasAmount(n);
+  if (n <= 0) return "0.00";
+  return n.toLocaleString("en-US", { maximumSignificantDigits: 2 });
+}
+
+/**
+ * What the pooled balance — the sum across every network's tank — is labelled in.
+ *
+ * The tanks are not all held in the same token: BOT Chain settles in bridged USDT, every other
+ * network in USDC, so no single ticker is true of the total. Both surfaces used to borrow one
+ * chain's symbol and disagreed about which — the header pill took the wallet's chain and the modal
+ * took the selected one, putting "0.00 USDC" and "0.00 USDT" on screen for the same number. They
+ * are all dollar stablecoins, so the pooled figure is quoted in dollars and the real ticker is
+ * named only where it is actually true: the per-network rows, the top-up field, the approval.
+ */
+export const POOLED_SYMBOL = "USD";
+
 /** Ease-out so the count decelerates into its final value instead of stopping dead. */
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 

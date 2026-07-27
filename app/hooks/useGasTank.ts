@@ -21,9 +21,7 @@ export function getChainsWithGasTank(): number[] {
 }
 
 import { getGasCostPerRunUsd } from "@/config/gas-cost-env";
-
-/** Buffer multiplier for network instability (user must have runs × cost × BUFFER in gas tank). */
-export const GAS_BUFFER_MULTIPLIER = 3;
+import { useOperatorRunPriceUsdc6 } from "@/app/hooks/useRunCost";
 
 /** A tank that can cover this many runs is drawn full. Nothing on-chain says so — it is a scale. */
 export const RUNS_FOR_FULL_TANK = 100;
@@ -136,6 +134,43 @@ export function useGasTank() {
   };
 }
 
+/** Where the per-run charge came from, in the order it is resolved. */
+export type RunPriceSource = "operator" | "contract" | "config";
+
+/**
+ * What one run charges this network's tank, and who decided it.
+ *
+ * Three parties can set this and they are tried in the order the relayer tries them
+ * (backend/src/run-executor.ts), because a number the UI quotes and the relayer does not debit is
+ * worse than no number at all:
+ *
+ *   operator — a flat rate set per network on the backend dashboard. Editable without a
+ *              transaction, which is why it outranks the contract.
+ *   contract — the GasTank's own gasCostPerExecutionUsdc6, changed only by an owner tx.
+ *   config   — the build-time per-chain default, for a chain where neither is set.
+ *
+ * Everything user-facing that prices a run goes through here, so the top-up modal, the plan
+ * creator's prepay and the runs-left gauge can never quote three different prices.
+ */
+export function useEffectiveRunPriceUsdc6(chainId: number | undefined): {
+  usdc6: bigint;
+  source: RunPriceSource;
+} {
+  const { usdc6: operatorUsdc6 } = useOperatorRunPriceUsdc6(chainId);
+  const contractUsdc6 = useGasCostPerExecutionForChain(chainId ?? 0);
+
+  if (operatorUsdc6 != null && operatorUsdc6 > 0n) {
+    return { usdc6: operatorUsdc6, source: "operator" };
+  }
+  if (contractUsdc6 > 0n) {
+    return { usdc6: contractUsdc6, source: "contract" };
+  }
+  return {
+    usdc6: BigInt(Math.max(1, Math.ceil(getGasCostPerRunUsd(chainId ?? 0) * 1_000_000))),
+    source: "config",
+  };
+}
+
 /** Gas cost per execution (USDC 6 decimals) from contract for a chain. Returns 0n if no GasTank or not set. */
 export function useGasCostPerExecutionForChain(chainId: number): bigint {
   const contracts = getContracts(chainId);
@@ -152,19 +187,13 @@ export function useGasCostPerExecutionForChain(chainId: number): bigint {
   return data ?? 0n;
 }
 
-/** Required gas (USDC 6 decimals) for a plan: totalRuns × costPerRun (exact, no buffer). Use when contract gas cost is known. */
-export function requiredGasUsdc6Exact(totalRuns: number, chainId: number): bigint {
-  const costPerRun = getGasCostPerRunUsd(chainId);
-  const usd = totalRuns * costPerRun;
-  return BigInt(Math.ceil(usd * 1_000_000)); // 6 decimals
-}
-
-/** Required gas (USDC 6 decimals) for a plan: totalRuns × costPerRunUsd(chainId) × buffer. Fallback when contract cost is 0. */
-export function requiredGasUsdc6(totalRuns: number, chainId: number): bigint {
-  const costPerRun = getGasCostPerRunUsd(chainId);
-  const usd = totalRuns * costPerRun * GAS_BUFFER_MULTIPLIER;
-  return BigInt(Math.ceil(usd * 1_000_000)); // 6 decimals
-}
+/*
+ * `requiredGasUsdc6` / `requiredGasUsdc6Exact` used to live here: totalRuns × the build-time
+ * per-chain constant, one with a 3x buffer. They priced a plan off a number no operator could
+ * change and the relayer never charged, so a plan prepaid through them could still run its tank
+ * dry. Multiply useEffectiveRunPriceUsdc6 by the run count instead — that is the price the
+ * relayer debits, whoever set it.
+ */
 
 type ChainBalance = { balance: bigint; isLoading: boolean };
 
@@ -251,14 +280,12 @@ export function useGasTankAllChains(): {
  * run costs 0.001. Runs are the unit users actually care about, and the level drives the gauges.
  */
 export function useGasTankLevel(balanceUsdc6: bigint, chainId: number | undefined) {
-  const contractCost = useGasCostPerExecutionForChain(chainId ?? 0);
-  const costPerRunUsdc6 =
-    contractCost > 0n
-      ? contractCost
-      : BigInt(Math.max(1, Math.ceil(getGasCostPerRunUsd(chainId ?? 0) * 1_000_000)));
+  const { usdc6: costPerRunUsdc6, source: costSource } = useEffectiveRunPriceUsdc6(chainId);
   const runsLeft = costPerRunUsdc6 > 0n ? Number(balanceUsdc6 / costPerRunUsdc6) : 0;
   return {
     costPerRunUsdc6,
+    /** Who set that price — an operator's flat rate is not the same claim as the contract's. */
+    costSource,
     runsLeft,
     /** 0–1, full at RUNS_FOR_FULL_TANK runs — a gauge needs a ceiling and this is a plausible one. */
     level: Math.min(1, runsLeft / RUNS_FOR_FULL_TANK),

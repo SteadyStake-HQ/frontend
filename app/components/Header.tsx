@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useChainModal } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
 import { CHAIN_ICON_URLS } from "@/config/wagmi";
+import { useNetworkAllocation } from "@/app/hooks/useNetworkAllocation";
 import { CustomConnectButton } from "./CustomConnectButton";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
@@ -51,6 +52,7 @@ function StartDCAIcon({ className }: { className?: string }) {
 function SwitchNetworkButton({ large = false }: { large?: boolean }) {
   const { openChainModal } = useChainModal();
   const { chain, isConnected } = useAccount();
+  const allocation = useNetworkAllocation();
   const [mounted, setMounted] = useState(false);
   const [iconError, setIconError] = useState(false);
 
@@ -78,13 +80,26 @@ function SwitchNetworkButton({ large = false }: { large?: boolean }) {
     ? "ss-btn ss-btn-secondary ss-btn-sm ss-btn-nudge-y h-10 px-4 text-sm"
     : "ss-btn ss-btn-secondary ss-btn-sm ss-btn-nudge-y h-10 gap-1.5 px-2.5";
 
+  /**
+   * The operator has taken this network out of service. Worth saying on the switcher itself: the
+   * user's plans are still there and still theirs, but nothing new will run until it is resumed, and
+   * the fix is to switch networks.
+   */
+  const outOfService =
+    mounted && isConnected && chain?.id != null && !allocation.acceptsNewPlans(chain.id);
+  const paused = outOfService && chain?.id != null && allocation.isPaused(chain.id);
+  const title = outOfService
+    ? `${chain?.name ?? "This network"} is ${paused ? "paused" : "not in service"} — switch network`
+    : "Switch network";
+
   return (
     <button
       type="button"
       onClick={openChainModal}
       className={btnClass}
-      title="Switch network"
-      aria-label="Switch network"
+      title={title}
+      aria-label={title}
+      data-network-paused={outOfService ? "true" : undefined}
     >
       {chainIconUrl ? (
         <span
@@ -103,6 +118,14 @@ function SwitchNetworkButton({ large = false }: { large?: boolean }) {
         <NetworkIcon className={`${iconSize} shrink-0 text-current`} />
       )}
       <span className="hidden sm:inline">{label}</span>
+      {outOfService ? (
+        <span
+          className="hidden shrink-0 rounded-full bg-amber-400/15 px-1.5 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide text-amber-500 sm:inline"
+          title={title}
+        >
+          {paused ? "Paused" : "Offline"}
+        </span>
+      ) : null}
       <svg
         className={`${chevronSize} shrink-0 text-current hidden sm:block`}
         fill="none"

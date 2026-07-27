@@ -52,6 +52,43 @@ export function useNativePriceUsd(chainId: number | undefined): {
   return { usd: data?.usd ?? null, source: data?.source ?? null, isLoading: enabled && isLoading };
 }
 
+/**
+ * The flat rate an operator has set for this network on the backend dashboard, in USDC 6-decimals.
+ * Null when none is set, which is the normal case and hands the price back to the GasTank's own
+ * gasCostPerExecutionUsdc6 (see useEffectiveRunPriceUsdc6 in useGasTank.ts).
+ *
+ * This is not a second opinion about the price: the relayer resolves the same order and debits
+ * exactly this number when it is set (backend/src/run-executor.ts), so quoting anything else here
+ * would show a user a figure their tank never sees.
+ */
+export function useOperatorRunPriceUsdc6(chainId: number | undefined): {
+  usdc6: bigint | null;
+  isLoading: boolean;
+} {
+  const enabled = Boolean(chainId && chainId > 0);
+  const { data, isLoading } = useQuery({
+    queryKey: ["operator-run-price", chainId],
+    enabled,
+    // Only an operator edit moves this, and the route caches for the same window.
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+    retry: 1,
+    queryFn: async () => {
+      const res = await fetch(`/api/run-price?chainId=${chainId}`);
+      if (!res.ok) return null;
+      const json = (await res.json()) as { usdc6?: string | null };
+      const raw = json?.usdc6;
+      if (typeof raw !== "string" || !/^\d+$/.test(raw)) return null;
+      const usdc6 = BigInt(raw);
+      return usdc6 > 0n ? usdc6.toString() : null;
+    },
+  });
+  return {
+    usdc6: typeof data === "string" ? BigInt(data) : null,
+    isLoading: enabled && isLoading,
+  };
+}
+
 /** Whether the gas-units figure came from real runs or from the pre-measurement seed. */
 export type GasUnitsSource = "measured" | "seed";
 

@@ -59,8 +59,29 @@ In `backend/`:
 | `RELAYER_PRIVATE_KEY` | Wallet that sends executeSwap and recordExecution; must be GasTank executor and hold native gas token. |
 | `SUPABASE_DB_URL` | Supabase Postgres (Session Pooler) connection string, shared with the frontend; stores the registered-user list. |
 | `ZERO_EX_API_KEY` | Optional; for 0x swap quotes. |
-| `GAS_COST_PER_EXECUTION_USDC` | **Fallback only.** Per-execution cost in USDC (e.g. `0.01`), used only when the GasTank's own `gasCostPerExecutionUsdc6` is 0. The contract value is authoritative because it is what the UI quotes and what the user prepays — if this env var outranked it the relayer would deduct a different amount than the plan was funded for. |
+| `GAS_COST_PER_EXECUTION_USDC` | **Last fallback.** Per-execution cost in USDC (e.g. `0.01`), used only when neither an operator price nor the GasTank's own `gasCostPerExecutionUsdc6` is set. See "Per-run price" below. |
+| `ADMIN_API_TOKEN` | Required to change the per-run price or hold a plan from the operator dashboard. Unset = those endpoints refuse every request. |
 | `AUTOMATION_CHAIN_IDS` | Optional; comma-separated chain IDs (e.g. `84532,8453`). Empty = all registered chains. |
+
+#### Per-run price
+
+What a run charges a user's tank is resolved in one order, by the relayer and the app alike — a
+number the UI quotes and the relayer does not debit is what lets a fully funded plan run its tank
+dry mid-way:
+
+1. **Operator price** — set per network on the backend dashboard at `/run-price.html`, stored by
+   `backend/src/run-price.ts` (Supabase `kv_store`, or `run-price.json` when no database is
+   configured). Changeable without a transaction, which is why it wins.
+2. **`gasCostPerExecutionUsdc6`** on that chain's GasTank — an owner-only transaction
+   (`scripts/set-gas-cost.js`).
+3. **`GAS_COST_PER_EXECUTION_USDC`** for a chain where neither is set.
+4. Otherwise each run is charged what it measured, so the amount moves with gas.
+
+The dashboard shows each network's flat rate beside what a run costs the relayer right now (gas
+price × measured gas × native token price), so a rate can be set against the live cost rather than
+guessed. The app reads the operator price through `/api/run-price` and the rest from the chain
+(`useEffectiveRunPriceUsdc6`). A price change reaches the relayer within ~30s and the app within
+~2 minutes of caching, so avoid changing a price and quoting the new one in the same breath.
 
 Run once:
 

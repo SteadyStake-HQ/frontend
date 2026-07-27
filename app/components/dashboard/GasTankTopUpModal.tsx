@@ -6,12 +6,14 @@ import { toast } from "react-toastify";
 import {
   useAccount,
   useBalance,
+  useChainId,
   usePublicClient,
   useReadContract,
   useSwitchChain,
   useWriteContract,
 } from "wagmi";
 import {
+  useEffectiveRunPriceUsdc6,
   useGasTankAllChains,
   useGasTankLevel,
   useGasTankRefresh,
@@ -19,6 +21,7 @@ import {
 } from "@/app/hooks/useGasTank";
 import { GAS_TANK_ABI, ERC20_ABI } from "@/config/abis";
 import { getContracts, getStableSymbol } from "@/config/contracts";
+import { SUPPORTED_CHAIN_IDS } from "@/config/chains-env";
 import {
   useRunCostBreakdown,
   formatNativeAmount,
@@ -32,7 +35,9 @@ import {
   AnimatedGasAmount,
   GasTankGauge,
   GasTankIcon,
+  POOLED_SYMBOL,
   formatGasAmount,
+  formatRunCostUsd,
   gasAmountFromUsdc6,
 } from "./GasTankVisuals";
 
@@ -47,15 +52,27 @@ const QUICK_AMOUNTS = [1, 5, 10, 25];
  */
 type Stage = "switching" | "approving" | "depositing" | "confirming" | "done";
 
+/**
+ * The network this modal is talking about.
+ *
+ * It lists every network the build supports, not only the ones with a GasTank deployed. The
+ * selector used to be filtered to fundable chains, which on a mainnet build meant BOT Chain alone
+ * — so the whole modal, breakdown included, could only ever describe one network however many the
+ * app actually ran plans on. A chain without a tank is still worth quoting (its gas, its token,
+ * its per-run cost are all real), so it stays selectable and is marked rather than hidden; the
+ * top-up section is what refuses, and it says why.
+ */
 function ChainSelect({
   selectedChainId,
   chainIds,
+  tankChainIds,
   byChain,
   onSelect,
   disabled,
 }: {
   selectedChainId: number;
   chainIds: number[];
+  tankChainIds: number[];
   byChain: Record<number, bigint>;
   onSelect: (chainId: number) => void;
   disabled?: boolean;
@@ -72,6 +89,15 @@ function ChainSelect({
   }, []);
 
   const label = CHAIN_NAMES[selectedChainId] ?? `Chain ${selectedChainId}`;
+  const hasTank = (cid: number) => tankChainIds.includes(cid);
+
+  /** A balance only means something where a tank exists; elsewhere say so instead of showing 0.00. */
+  const trailing = (cid: number) =>
+    hasTank(cid) ? (
+      <span className="gt-select-bal">{gasAmountFromUsdc6(byChain[cid] ?? 0n)}</span>
+    ) : (
+      <span className="gt-select-tag">no tank yet</span>
+    );
 
   return (
     <div ref={ref} className="gt-select">
@@ -85,7 +111,7 @@ function ChainSelect({
       >
         <ChainMark chainId={selectedChainId} />
         <span className="gt-select-name">{label}</span>
-        <span className="gt-select-bal">{gasAmountFromUsdc6(byChain[selectedChainId] ?? 0n)}</span>
+        {trailing(selectedChainId)}
         <svg className={`gt-select-caret${open ? " is-open" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M19 9l-7 7-7-7" />
         </svg>
@@ -102,11 +128,11 @@ function ChainSelect({
                     onSelect(cid);
                     setOpen(false);
                   }}
-                  className={`gt-select-item${selectedChainId === cid ? " is-selected" : ""}`}
+                  className={`gt-select-item${selectedChainId === cid ? " is-selected" : ""}${hasTank(cid) ? "" : " is-tankless"}`}
                 >
                   <ChainMark chainId={cid} />
                   <span className="gt-select-name">{CHAIN_NAMES[cid] ?? `Chain ${cid}`}</span>
-                  <span className="gt-select-bal">{gasAmountFromUsdc6(byChain[cid] ?? 0n)}</span>
+                  {trailing(cid)}
                 </button>
               </li>
             ))}
@@ -131,7 +157,7 @@ function ChainMark({ chainId, className }: { chainId: number; className?: string
 }
 
 /**
- * Where the per-run price comes from, for the network currently selected.
+ * Where the per-run price comes from, for the network the wallet is on.
  *
  * The tank is held in a stablecoin, but nothing on chain is paid in it: the relayer signs two
  * transactions for every scheduled run — the swap itself, and the recordExecution that debits
@@ -140,22 +166,47 @@ function ChainMark({ chainId, className }: { chainId: number; className?: string
  * with sub-cent fees can still cost fifty cents on one whose token trades in the hundreds.
  *
  * Every term is read live (see useRunCostBreakdown): gas price from the chain, token price from
- * /api/native-price, the charge itself from the GasTank contract. All three differ per network,
- * so switching the selector above re-quotes the whole thing rather than restating one chain's
- * numbers. Collapsed by default — the headline price is what most people came for, and the
- * arithmetic behind it should not push the balance and the top-up field off screen.
+ * /api/native-price, the charge itself from whoever set it for this network — an operator's flat
+ * rate where one is set, the GasTank contract otherwise (useEffectiveRunPriceUsdc6). Collapsed by
+ * default — the headline price is what most people came for, and the arithmetic behind it should
+ * not push the balance and the top-up field off screen.
+ *
+ * The network is the one the wallet is connected to — whatever RainbowKit's switcher is showing —
+ * and not the one picked in the top-up section below. Those are two different questions. The
+ * selector answers "which tank am I putting money into", which on a mainnet build can only be BOT
+ * Chain because it is the only network with a tank deployed; this answers "what does a run cost on
+ * the network I am on", which is a real question about Base or Polygon whether or not either can
+ * be funded yet. Keying this off the selector meant the modal opened on BOT Chain's numbers no
+ * matter what the wallet was connected to, which is what made the section look hardwired.
+ *
+ * Two rules keep it honest on a network other than the one with the tank, because "0.06 USDT,
+ * flat rate" under Base's name is worse than saying nothing:
+ *
+ *   - Where no tank is deployed there is no charge to quote, so the headline is the live cost of a
+ *     run on that chain instead — gas price x measured gas units x the token's USD price — and is
+ *     labelled an estimate. The build-time per-chain default is deliberately not used here: it is
+ *     the constant we fall back to when nobody has set a price, not a fact about the network.
+ *   - Where even that cannot be read — an RPC we cannot reach, a token no feed prices — the whole
+ *     section hides. A breakdown with every row blank teaches a user nothing, and one that keeps
+ *     the last chain's numbers actively misleads them.
  */
-function RunCostExplainer({
-  chainId,
-  costPerRunUsdc6,
-}: {
-  chainId: number;
-  costPerRunUsdc6: bigint;
-}) {
+function RunCostExplainer({ chainId }: { chainId: number }) {
   const [open, setOpen] = useState(false);
   const symbol = getNativeSymbol(chainId);
   const stable = getStableSymbol(chainId);
   const chainName = CHAIN_NAMES[chainId] ?? `Chain ${chainId}`;
+  /**
+   * Read here rather than handed down from the top-up section: that section resolves the price of
+   * the chain being funded, and this one is describing the chain the wallet is on. They are the
+   * same number only when those two happen to agree.
+   */
+  const { usdc6: costPerRunUsdc6, source: costSource } = useEffectiveRunPriceUsdc6(chainId);
+  /**
+   * Whether a run on this network charges anything at all. Only the tank's own address decides
+   * that — the settlement stablecoin matters for making a deposit, not for whether a debit exists.
+   */
+  const gasTankAddr = getContracts(chainId)?.GasTank;
+  const hasGasTank = Boolean(gasTankAddr && gasTankAddr !== ZERO);
   const {
     feeNative,
     nativeUsd,
@@ -169,22 +220,77 @@ function RunCostExplainer({
   } = useRunCostBreakdown(chainId);
 
   const chargedUsd = Number(formatUnits(costPerRunUsdc6, 6));
-  const charged = formatGasAmount(chargedUsd);
 
   /**
-   * Gas moves; the on-chain rate is only re-set when someone changes it. Saying so beats letting
+   * The headline figure for this network. A chain with a tank quotes what that tank is charged; a
+   * chain without one has no charge to quote, so it quotes what a run there costs right now.
+   * Null means neither is knowable and the section has nothing to say — see the early return.
+   */
+  const headlineUsd = hasGasTank ? chargedUsd : liveUsd;
+  const headline = headlineUsd != null ? formatRunCostUsd(headlineUsd) : null;
+  /**
+   * A charge is denominated in the token the tank holds; an estimate is not denominated in
+   * anything, because no tank on this network holds it. Quoting the estimate in USDC would imply
+   * one does — dollars are the honest unit for a figure nobody is charged in.
+   */
+  const headlineUnit = hasGasTank ? stable : POOLED_SYMBOL;
+
+  /**
+   * Where the figure came from. A rate someone chose, a rate written into the contract, and a cost
+   * we worked out ourselves are three different claims, and the difference is exactly what a user
+   * asking "who decided this?" wants.
+   */
+  const headlineFrom = !hasGasTank
+    ? `estimated live · no tank on ${chainName} yet`
+    : costSource === "operator"
+      ? "flat rate, set per network"
+      : costSource === "contract"
+        ? "flat rate, set on-chain"
+        : "flat rate, default";
+
+  /**
+   * Gas moves; the flat rate is only re-set when someone changes it. Saying so beats letting
    * a user find the gap themselves and conclude the number is made up — but only call it out once
-   * it is wide enough to notice, or every rounding difference reads as a warning.
+   * it is wide enough to notice, or every rounding difference reads as a warning. Silent where no
+   * tank exists: the headline is already the live figure there, so there is no gap to report.
    */
   const driftNote = (() => {
+    if (!hasGasTank) return null;
     if (liveUsd == null || chargedUsd <= 0) return null;
     const drift = (liveUsd - chargedUsd) / chargedUsd;
     if (Math.abs(drift) < 0.25) return null;
-    const live = formatGasAmount(liveUsd);
+    const live = formatRunCostUsd(liveUsd);
+    const charged = formatRunCostUsd(chargedUsd);
     return drift > 0
       ? `${symbol} or gas has risen since the rate was set — a run costs the relayer about ${live} ${stable} today, and you are still charged ${charged}.`
       : `Gas is cheaper than when the rate was set — a run costs the relayer about ${live} ${stable} today, against the ${charged} charged.`;
   })();
+
+  if (headline == null) {
+    /*
+     * Still reading. The chain's gas price and its token's USD price arrive over the network, and
+     * unmounting the section for that half-second only to bring it back is a jump the user has to
+     * re-read; holding the row and saying what it is waiting for is quieter.
+     */
+    if (isLoading) {
+      return (
+        <section className="gt-why">
+          <div className="gt-why-toggle" role="status">
+            <span className="gt-why-toggle-label">
+              What a run costs
+              <span className="gt-why-chain">on {chainName}</span>
+            </span>
+            <span className="gt-why-price">
+              <em>reading…</em>
+            </span>
+          </div>
+        </section>
+      );
+    }
+    // Nothing charges a run here and nothing will quote one either. Say nothing rather than
+    // showing a breakdown of blanks under this network's name.
+    return null;
+  }
 
   return (
     <section className={`gt-why${open ? " is-open" : ""}`}>
@@ -198,9 +304,19 @@ function RunCostExplainer({
         <span className="gt-why-toggle-label">
           What a run costs
           <span className="gt-why-chain">on {chainName}</span>
+          {/*
+            The panel is collapsed by default, so anything that only appears once it is open will
+            be missed by most people. A figure that moves has to say so where the figure is.
+          */}
+          {!hasGasTank && (
+            <span className="gt-why-tag">
+              <span className="gt-why-tag-dot" aria-hidden />
+              live estimate
+            </span>
+          )}
         </span>
         <span className="gt-why-price">
-          {charged} <small>{stable}</small>
+          {headline} <small>{headlineUnit}</small>
         </span>
         <svg className="gt-why-chev" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M19 9l-7 7-7-7" />
@@ -251,18 +367,50 @@ function RunCostExplainer({
             </div>
             <div className="gt-why-row gt-why-row-out">
               <dt>
-                Charged to your tank <span>flat rate, set on-chain</span>
+                {hasGasTank ? "Charged to your tank" : `Cost of a run on ${chainName}`}{" "}
+                <span>{headlineFrom}</span>
               </dt>
-              <dd>{charged} {stable}</dd>
+              <dd>{headline} {headlineUnit}</dd>
             </div>
           </dl>
 
           <p className="gt-why-note">
-            Each run is two transactions our relayer signs and pays for in {symbol} — the swap on{" "}
-            {chainName}, and the record that debits this tank. Their combined fee at {symbol}&apos;s
-            USD price is what the {charged} {stable} covers. It is a flat rate, not a meter: a run that
-            costs the relayer more never charges you extra.
+            {hasGasTank ? (
+              <>
+                Each run is two transactions our relayer signs and pays for in {symbol} — the swap
+                on {chainName}, and the record that debits this tank. Their combined fee at{" "}
+                {symbol}&apos;s USD price is what the {headline} {headlineUnit} covers. It is a flat
+                rate, not a meter: a run that costs the relayer more never charges you extra.
+              </>
+            ) : (
+              <>
+                Each run is two transactions our relayer signs and pays for in {symbol} — the swap
+                on {chainName}, and the record of it. Their combined fee at {symbol}&apos;s USD
+                price is the {headline} {headlineUnit} above. No gas tank is deployed on {chainName}{" "}
+                yet, so nothing charges you that — it is what a run here costs to run.
+              </>
+            )}
           </p>
+
+          {/*
+            Said plainly, and given its own box, because the two numbers behind an estimate are
+            exactly the two a user does not expect to move: gas rises when the network is busy, and
+            the token it is paid in is repriced by a market that never closes. Without this the
+            figure reads like a rate someone set, and every later reading of it looks like a bug.
+            Only for the estimate — a flat rate genuinely does not move, and saying it might would
+            be the same mistake in the other direction.
+          */}
+          {!hasGasTank && (
+            <p className="gt-why-live">
+              <span className="gt-why-live-dot" aria-hidden />
+              <span>
+                <b>This figure moves.</b> It is {chainName}&apos;s gas price and {symbol}&apos;s USD
+                price as they stand this minute — a busy network raises the first, the market moves
+                the second, and either changes what a run here costs. Both are re-read while this
+                panel is open, so expect the number to differ from one visit to the next.
+              </span>
+            </p>
+          )}
 
           {driftNote && <p className="gt-why-drift">{driftNote}</p>}
 
@@ -272,8 +420,9 @@ function RunCostExplainer({
               {Number(gasUnits).toLocaleString("en-US")} gas per run{" "}
               {gasUnitsSource === "measured"
                 ? `(measured from the last ${gasUnitsSamples} run${gasUnitsSamples === 1 ? "" : "s"})`
-                : "(estimated — no runs measured yet)"}{" "}
-              · re-read while this stays open.
+                : "(estimated — no runs measured yet)"}
+              {/* The callout above already says this where it matters; no need to say it twice. */}
+              {hasGasTank ? " · re-read while this stays open." : ""}
             </p>
           )}
           </div>
@@ -290,14 +439,36 @@ interface GasTankTopUpModalProps {
 
 export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
   const { address, isConnected, chainId: walletChainId } = useAccount();
+  /**
+   * The network RainbowKit is showing. `walletChainId` is undefined until a wallet connects, and
+   * the run-cost section still has something true to say before that — useChainId falls back to
+   * the first configured chain, which is what the rest of the app reads too (useContracts).
+   */
+  const activeChainId = useChainId();
   const chainsWithGasTank = useMemo(() => getChainsWithGasTank(), []);
+  /**
+   * Every network the build supports, fundable ones first. The selector offers all of them so the
+   * breakdown can quote any network the app runs plans on; ordering keeps the ones you can
+   * actually top up at the top of the list rather than scattered through it.
+   */
+  const selectableChains = useMemo(
+    () => [
+      ...chainsWithGasTank,
+      ...SUPPORTED_CHAIN_IDS.filter((cid) => !chainsWithGasTank.includes(cid)),
+    ],
+    [chainsWithGasTank],
+  );
   const { totalBalanceUsdc6, byChain } = useGasTankAllChains();
   const refreshGasTank = useGasTankRefresh();
 
-  const [selectedChainId, setSelectedChainId] = useState<number>(chainsWithGasTank[0] ?? 84532);
+  const [selectedChainId, setSelectedChainId] = useState<number>(
+    chainsWithGasTank[0] ?? SUPPORTED_CHAIN_IDS[0] ?? 84532,
+  );
   const [amount, setAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage | null>(null);
+  /** A switch asked for from the banner rather than as the first step of a top-up. */
+  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
   /** Which steps this particular top-up needs. Set at submit, so the rail never invents one. */
   const [flow, setFlow] = useState<{ switchNetwork: boolean; approve: boolean }>({
     switchNetwork: false,
@@ -410,6 +581,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
     setAmount("");
     setAddedUsdc6(0n);
     setFreshChainId(null);
+    setIsSwitchingNetwork(false);
   }, [open]);
 
   useEffect(() => {
@@ -419,6 +591,28 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (isBusy) return;
     if (contentRef.current && !contentRef.current.contains(e.target as Node)) onClose();
+  };
+
+  /**
+   * Move the wallet to the network being funded, on its own.
+   *
+   * A deposit lands on whichever chain the wallet signs it on, so funding BOT Chain from a wallet
+   * sitting on Base has always meant a switch. handleTopUp still does it as the first step, but
+   * doing it only there made the switch a surprise inside a multi-signature flow — the wallet would
+   * pop a network prompt when the user thought they were confirming a transfer. Asking up front,
+   * in the section that names the network, makes the switch the deliberate act it is.
+   */
+  const handleSwitchNetwork = async () => {
+    if (isSwitchingNetwork) return;
+    setIsSwitchingNetwork(true);
+    try {
+      await switchChainAsync({ chainId: selectedChainId });
+      setError(null);
+    } catch (err) {
+      setError(parseTxError(err, "Could not switch network"));
+    } finally {
+      setIsSwitchingNetwork(false);
+    }
   };
 
   /**
@@ -605,7 +799,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                   <p className="gt-hero-label">Total balance</p>
                   <p className="gt-hero-value">
                     <AnimatedGasAmount valueUsdc6={totalBalanceUsdc6} />
-                    <small>{stable}</small>
+                    <small>{POOLED_SYMBOL}</small>
                   </p>
                   <p className="gt-hero-note">
                     {isEmpty
@@ -626,8 +820,8 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
               </section>
             )}
 
-            {/* ---------- Why a run costs what it costs ---------- */}
-            <RunCostExplainer chainId={selectedChainId} costPerRunUsdc6={costPerRunUsdc6} />
+            {/* ---------- Why a run costs what it costs, on the network the wallet is on ---------- */}
+            <RunCostExplainer chainId={activeChainId} />
 
             {/* ---------- Where it is held ---------- */}
             {breakdown.length > 0 && (
@@ -667,7 +861,8 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
 
               <ChainSelect
                 selectedChainId={selectedChainId}
-                chainIds={chainsWithGasTank}
+                chainIds={selectableChains}
+                tankChainIds={chainsWithGasTank}
                 byChain={byChain}
                 onSelect={(cid) => {
                   setSelectedChainId(cid);
@@ -678,10 +873,42 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
 
               {!hasGasTank ? (
                 <p className="gt-hint gt-hint-warn">
-                  No gas tank is deployed on this network yet — pick another one.
+                  No gas tank is deployed on {CHAIN_NAMES[selectedChainId] ?? "this network"} yet —
+                  the cost above is what a run there would come to. Pick a network with a tank to
+                  top up.
                 </p>
               ) : (
                 <>
+                  {/*
+                    The deposit is signed on whatever chain the wallet is on, so a mismatch has to be
+                    resolved before the money moves. handleTopUp switches too, but only after the
+                    user has committed — this asks while the network is still the thing on screen.
+                  */}
+                  {isConnected && needsSwitch && (
+                    <div className="gt-switch">
+                      <svg fill="none" stroke="currentColor" strokeWidth="2.1" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h13m0 0l-3-3m3 3l-3 3M20 17H7m0 0l3 3m-3-3l3-3" />
+                      </svg>
+                      <p className="gt-switch-copy">
+                        Your wallet is on{" "}
+                        <b>{walletChainId ? CHAIN_NAMES[walletChainId] ?? `Chain ${walletChainId}` : "another network"}</b>{" "}
+                        — a top-up lands on the network it signs from, so funding{" "}
+                        <b>{CHAIN_NAMES[selectedChainId] ?? `Chain ${selectedChainId}`}</b> needs a
+                        switch.
+                      </p>
+                      <button
+                        type="button"
+                        className="gt-switch-btn"
+                        onClick={() => void handleSwitchNetwork()}
+                        disabled={isBusy || isSwitchingNetwork}
+                      >
+                        {isSwitchingNetwork
+                          ? "Switching…"
+                          : `Switch to ${CHAIN_NAMES[selectedChainId] ?? "it"}`}
+                      </button>
+                    </div>
+                  )}
+
                   <div className="gt-amount">
                     <span className="gt-amount-prefix" aria-hidden>$</span>
                     <input
@@ -736,7 +963,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                       Buys about <b>{runsBought > 9999 ? "9,999+" : runsBought.toLocaleString("en-US")}</b> scheduled runs
-                      {" "}({formatGasAmount(Number(formatUnits(costPerRunUsdc6, 6)))} {stable} each).
+                      {" "}({formatRunCostUsd(Number(formatUnits(costPerRunUsdc6, 6)))} {stable} each).
                     </p>
                   )}
                   {overBalance && (
@@ -753,9 +980,11 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
           {/* Footer */}
           <div className="gt-foot">
             <p className="gt-foot-hint">
-              {needsApproval && amountWei > 0n
-                ? "Approval and deposit run back to back — your wallet will ask twice."
-                : "Gas is deducted per run, on whichever network has a balance."}
+              {isConnected && hasGasTank && needsSwitch
+                ? `Your wallet switches to ${CHAIN_NAMES[selectedChainId] ?? "that network"} first — it will ask.`
+                : needsApproval && amountWei > 0n
+                  ? "Approval and deposit run back to back — your wallet will ask twice."
+                  : "Gas is deducted per run, on whichever network has a balance."}
             </p>
             <button type="button" onClick={onClose} disabled={isBusy} className="ss-btn ss-btn-soft">
               Close
@@ -795,7 +1024,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                   +{gasAmountFromUsdc6(addedUsdc6)} <small>{stable}</small>
                 </p>
                 <p className="gt-done-sub">
-                  New balance <b>{gasAmountFromUsdc6(totalBalanceUsdc6)} {stable}</b> — updated everywhere.
+                  New balance <b>{gasAmountFromUsdc6(totalBalanceUsdc6)} {POOLED_SYMBOL}</b> — updated everywhere.
                 </p>
               </div>
             ) : (

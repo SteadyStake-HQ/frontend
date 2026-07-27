@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAccount } from "wagmi";
-import { useContracts, useStableSymbol } from "@/app/hooks/useContracts";
+import { useContracts } from "@/app/hooks/useContracts";
 import { useGasTankAllChains, useGasTankLevel, getChainsWithGasTank } from "@/app/hooks/useGasTank";
 import { useGasTankModal } from "@/app/contexts/GasTankModalContext";
-import { AnimatedGasAmount, GasTankIcon, gasAmountFromUsdc6 } from "./GasTankVisuals";
+import { AnimatedGasAmount, GasTankIcon, POOLED_SYMBOL, gasAmountFromUsdc6 } from "./GasTankVisuals";
 
 /**
  * Dashboard entry point to the gas tank.
@@ -20,7 +20,6 @@ import { AnimatedGasAmount, GasTankIcon, gasAmountFromUsdc6 } from "./GasTankVis
 export function GasTankButton() {
   const { isConnected } = useAccount();
   const { chainId } = useContracts();
-  const stable = useStableSymbol();
   const { openGasTankModal } = useGasTankModal();
   const { totalBalanceUsdc6 } = useGasTankAllChains();
   const { runsLeft, level, isEmpty, isLow } = useGasTankLevel(totalBalanceUsdc6, chainId);
@@ -53,8 +52,8 @@ export function GasTankButton() {
     <button
       type="button"
       onClick={openGasTankModal}
-      title={`Gas tank: ${gasAmountFromUsdc6(totalBalanceUsdc6)} ${stable} — about ${runsLabel} scheduled runs. Click to top up.`}
-      aria-label={`Gas tank: ${gasAmountFromUsdc6(totalBalanceUsdc6)} ${stable}, about ${runsLabel} runs remaining. Open to top up.`}
+      title={`Gas tank: ${gasAmountFromUsdc6(totalBalanceUsdc6)} ${POOLED_SYMBOL} — about ${runsLabel} scheduled runs. Click to top up.`}
+      aria-label={`Gas tank: ${gasAmountFromUsdc6(totalBalanceUsdc6)} ${POOLED_SYMBOL}, about ${runsLabel} runs remaining. Open to top up.`}
       className={`gt-pill gt-pill-${tone}${justFilled ? " is-filled" : ""}`}
     >
       <span className="gt-pill-icon" aria-hidden>
@@ -64,7 +63,7 @@ export function GasTankButton() {
       <span className="gt-pill-copy">
         <span className="gt-pill-value">
           <AnimatedGasAmount valueUsdc6={totalBalanceUsdc6} />
-          <small>{stable}</small>
+          <small>{POOLED_SYMBOL}</small>
         </span>
         <span className="gt-pill-meter" aria-hidden>
           <span className="gt-pill-fill" style={{ ["--w" as string]: `${Math.max(2, level * 100)}%` }} />
