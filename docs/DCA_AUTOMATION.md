@@ -60,8 +60,10 @@ In `backend/`:
 | `SUPABASE_DB_URL` | Supabase Postgres (Session Pooler) connection string, shared with the frontend; stores the registered-user list. |
 | `ZERO_EX_API_KEY` | Optional; for 0x swap quotes. |
 | `GAS_COST_PER_EXECUTION_USDC` | **Last fallback.** Per-execution cost in USDC (e.g. `0.01`), used only when neither an operator price nor the GasTank's own `gasCostPerExecutionUsdc6` is set. See "Per-run price" below. |
-| `ADMIN_API_TOKEN` | Required to change the per-run price or hold a plan from the operator dashboard. Unset = those endpoints refuse every request. |
-| `AUTOMATION_CHAIN_IDS` | Optional; comma-separated chain IDs (e.g. `84532,8453`). Empty = all registered chains. |
+| `ADMIN_API_TOKEN` | Required to change the per-run price, hold a plan, or allocate a network from the operator dashboard. Unset = those endpoints refuse every request. |
+
+Which networks the relayer runs on is not an env variable: it is every chain with a deployed
+GasTank, minus the ones an operator has paused or removed under **Networks** on the dashboard.
 
 #### Per-run price
 
@@ -114,6 +116,6 @@ cd backend && npm run build && npm run loop
 ## Testing (Base Sepolia)
 
 1. Deploy GasTank on Base Sepolia, set executor to your relayer address, add GasTank to both deployed-addresses.
-2. Set `AUTOMATION_CHAIN_IDS=84532` in backend `.env`.
+2. To run Base Sepolia alone, pause the other networks on the dashboard's **Networks** page (or `POST /api/admin/networks/pause`).
 3. In the app, connect to Base Sepolia, top up gas tank, create a DCA plan (e.g. 1-minute frequency).
 4. Run `npm run run` in `backend/` (or wait for the loop). Check logs for `executed` and any `errors`.

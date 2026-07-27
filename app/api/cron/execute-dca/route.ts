@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, type Chain } from "viem";
 import { base, baseSepolia, bsc, polygon, sepolia } from "viem/chains";
+import { isSupportedChainId } from "@/config/chains-env";
 import { getAutomationUsers } from "@/lib/automation-users";
 import {
   get0xQuote,
@@ -24,16 +25,6 @@ const TESTNET_CHAIN_IDS = new Set([84532, 11155111, 968]); // Base Sepolia, Ethe
  * backend relayer (backend/src/run-executor.ts), not this Vercel cron route.
  */
 const DIRECT_SWAP_ROUTER_CHAINS = new Set([84532, 11155111, 677, 968]);
-
-function getAllowedChainIds(): Set<number> | null {
-  const raw = process.env.AUTOMATION_CHAIN_IDS?.trim();
-  if (!raw) return null;
-  const ids = raw
-    .split(",")
-    .map((s) => parseInt(s.trim(), 10))
-    .filter((n) => !isNaN(n) && n > 0);
-  return ids.length > 0 ? new Set(ids) : null;
-}
 
 function getGelatoApiKey(chainId: number): string | undefined {
   const isTestnet = TESTNET_CHAIN_IDS.has(chainId);
@@ -153,7 +144,6 @@ export async function GET(request: NextRequest) {
   }
 
   const zeroExKey = process.env.ZERO_EX_API_KEY;
-  const allowedChains = getAllowedChainIds();
 
   let members: string[] = [];
   try {
@@ -170,7 +160,10 @@ export async function GET(request: NextRequest) {
     const [chainIdStr, userAddress] = member.split(":");
     const chainId = parseInt(chainIdStr, 10);
     if (!userAddress || isNaN(chainId)) continue;
-    if (allowedChains && !allowedChains.has(chainId)) continue;
+    // The build's own network list is the only chain filter here. Which of those networks is in
+    // service is the backend's answer (/api/networks), and this route cannot honour it — it is the
+    // legacy Gelato path, kept only for revival, while the backend relayer enforces pauses itself.
+    if (!isSupportedChainId(chainId)) continue;
 
     const gelatoKey = getGelatoApiKey(chainId);
     if (!gelatoKey) {

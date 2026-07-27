@@ -1,12 +1,13 @@
 import { RevealOnScroll } from "./RevealOnScroll";
 import { LottieSection } from "./LottieSection";
-import { Card3D } from "./Card3D";
+import { NetworkGrid, NetworkLeadKicker } from "./NetworkGrid";
 
 /**
  * BOT Chain is the partner network, so it gets its own full-width card above the
  * grid rather than a fifth tile inside it — the hierarchy is the branding.
  */
 const LEAD_NETWORK = {
+  chainId: 677,
   name: "BOT Chain",
   iconUrl: "/bot.svg",
   kicker: "Partner network",
@@ -19,13 +20,6 @@ const LEAD_NETWORK = {
   ],
   href: "https://botchain.ai",
 } as const;
-
-const NETWORKS = [
-  { name: "BNB Chain", iconUrl: "/bsc.svg", theme: "mint" as const },
-  { name: "Base", iconUrl: "/base.svg", theme: "sky" as const },
-  { name: "Polygon", iconUrl: "/polygon.svg", theme: "lavender" as const },
-  { name: "Kava", iconUrl: "/kava.svg", theme: "peach" as const },
-] as const;
 
 export function WhyBase() {
   return (
@@ -64,12 +58,7 @@ export function WhyBase() {
             </span>
 
             <div className="nw-lead-copy">
-              <span className="nw-lead-kicker">
-                <span className="nw-live-dot" aria-hidden>
-                  <span className="nw-live-ping" />
-                </span>
-                {LEAD_NETWORK.kicker}
-              </span>
+              <NetworkLeadKicker chainId={LEAD_NETWORK.chainId} label={LEAD_NETWORK.kicker} />
               <h3 className="nw-lead-name">{LEAD_NETWORK.name}</h3>
               <p className="nw-lead-blurb">{LEAD_NETWORK.blurb}</p>
               <ul className="nw-lead-facts">
@@ -106,32 +95,7 @@ export function WhyBase() {
         </RevealOnScroll>
 
         <RevealOnScroll className="reveal-stagger">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {NETWORKS.map((item) => (
-              <div key={item.name} className="reveal-stagger-item">
-                <Card3D>
-                  <div className={`landing-card-sweet landing-card-${item.theme} nw-card h-full p-6`}>
-                    <span className="nw-logo">
-                      <img
-                        src={item.iconUrl}
-                        alt={item.name}
-                        className="h-7 w-7 object-contain"
-                        width={28}
-                        height={28}
-                      />
-                    </span>
-                    <h3 className="nw-name">{item.name}</h3>
-                    <span className="nw-live">
-                      <span className="nw-live-dot" aria-hidden>
-                        <span className="nw-live-ping" />
-                      </span>
-                      Live
-                    </span>
-                  </div>
-                </Card3D>
-              </div>
-            ))}
-          </div>
+          <NetworkGrid />
         </RevealOnScroll>
         <RevealOnScroll>
           <div className="landing-card-sweet landing-card-lavender nw-cta mt-6">
@@ -159,7 +123,7 @@ export function WhyBase() {
               href="https://telegram.me/+zsH_JP-eaDcxZTVh"
               target="_blank"
               rel="noopener noreferrer"
-              className="ss-btn ss-btn-primary ss-btn-pill self-start"
+              className="ss-btn ss-btn-primary ss-btn-pill nw-cta-action"
             >
               <span>Get in touch</span>
               <svg

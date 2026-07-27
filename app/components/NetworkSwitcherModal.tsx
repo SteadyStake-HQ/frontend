@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccount, useConfig, useSwitchChain } from "wagmi";
 import { CHAIN_ICON_URLS } from "@/config/wagmi";
+import { CHAIN_NAMES } from "@/lib/constants";
 import { useNetworkAllocation } from "@/app/hooks/useNetworkAllocation";
 
 /**
@@ -72,7 +73,15 @@ export function NetworkSwitcherModal({ onClose }: { onClose: () => void }) {
         ("iconUrl" in chain && typeof chain.iconUrl === "string" ? chain.iconUrl : undefined);
       return {
         chainId,
-        name: allocation.networks.find((n) => n.chainId === chainId)?.name ?? chain.name,
+        // Local name first, allocation second. Every chain that reaches this list is one the build
+        // has a wagmi entry for, so a name is always available locally — and it is the same one the
+        // header and the wallet show. Trusting the response's name here is what let a placeholder
+        // from an unreachable backend render as "Chain 677".
+        name:
+          CHAIN_NAMES[chainId] ??
+          chain.name ??
+          allocation.networks.find((n) => n.chainId === chainId)?.name ??
+          `Chain ${chainId}`,
         iconUrl,
         offered: allocation.acceptsNewPlans(chainId),
         paused: allocation.isPaused(chainId),

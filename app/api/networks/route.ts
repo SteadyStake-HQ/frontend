@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { SUPPORTED_CHAIN_IDS } from "@/config/chains-env";
 import { getNetworkType, NETWORK_TYPE } from "@/config/network-registry";
+import { CHAIN_NAMES } from "@/lib/constants";
 
 const SCHEDULER_API_URL =
   process.env.SCHEDULER_API_URL ??
@@ -39,10 +40,21 @@ export interface NetworkAllocationResponse {
  * app's networks away from users mid-session — the build-time list is what the app shipped with, and
  * the relayer enforces pauses on its own side regardless of what the UI believes.
  */
+/**
+ * Display name for a chain the build already knows about.
+ *
+ * The fallback list is rendered to users, so it must not invent placeholder names: `Chain 677` in
+ * the network switcher is indistinguishable from a rendering bug. lib/constants names every chain
+ * in SUPPORTED_CHAIN_IDS, and `Chain <id>` is left only for an id no table covers.
+ */
+function chainName(chainId: number): string {
+  return CHAIN_NAMES[chainId] ?? `Chain ${chainId}`;
+}
+
 function staticNetworks(): NetworkAllocationEntry[] {
   return SUPPORTED_CHAIN_IDS.map((chainId) => ({
     chainId,
-    name: `Chain ${chainId}`,
+    name: chainName(chainId),
     type: getNetworkType(chainId),
     status: "enabled" as const,
     visible: true,
@@ -103,7 +115,13 @@ export async function GET() {
       // can tolerate a few seconds before the UI catches up. The relayer stops immediately either way.
       { headers: { accept: "application/json" }, next: { revalidate: 10 } },
     );
-    if (!response.ok) return NextResponse.json(fallback);
+    if (!response.ok) {
+      console.warn(
+        `Network allocation: backend answered ${response.status} — serving the build's own list. ` +
+          `Pauses and removals will NOT be visible in the app.`,
+      );
+      return NextResponse.json(fallback);
+    }
     const data = (await response.json()) as { networks?: BackendNetwork[] };
     const networks = (data?.networks ?? [])
       .filter((n): n is BackendNetwork & { chainId: number } =>
@@ -111,7 +129,11 @@ export async function GET() {
       )
       .map<NetworkAllocationEntry>((n) => ({
         chainId: n.chainId,
-        name: typeof n.name === "string" ? n.name : `Chain ${n.chainId}`,
+        // Prefer the name this build knows: it is the one the rest of the UI and the wallet use, so
+        // a backend rename cannot make the switcher disagree with the header.
+        name:
+          CHAIN_NAMES[n.chainId] ??
+          (typeof n.name === "string" && n.name.trim() ? n.name.trim() : `Chain ${n.chainId}`),
         type: n.type === "mainnet" || n.type === "testnet" ? n.type : getNetworkType(n.chainId),
         status: isStatus(n.status) ? n.status : "enabled",
         visible: n.visible !== false,
@@ -122,14 +144,26 @@ export async function GET() {
     // An empty intersection means the two sides disagree about this deployment entirely (a testnet
     // backend behind a mainnet frontend, say). Showing nothing would look like an outage, so keep
     // the build's list and let the relayer be the one that refuses.
-    if (networks.length === 0) return NextResponse.json(fallback);
+    if (networks.length === 0) {
+      console.warn(
+        `Network allocation: the backend returned no network this build supports ` +
+          `(NETWORK_TYPE=${NETWORK_TYPE}, build chains=${SUPPORTED_CHAIN_IDS.join(",")}) — ` +
+          `serving the build's own list. Check that the backend and frontend agree on mainnet/testnet.`,
+      );
+      return NextResponse.json(fallback);
+    }
 
     return NextResponse.json({
       source: "backend",
       networkType: NETWORK_TYPE,
       networks,
     } satisfies NetworkAllocationResponse);
-  } catch {
+  } catch (error) {
+    console.warn(
+      `Network allocation: could not reach ${SCHEDULER_API_URL} — serving the build's own list. ` +
+        `Pauses and removals will NOT be visible in the app.`,
+      error,
+    );
     return NextResponse.json(fallback);
   }
 }

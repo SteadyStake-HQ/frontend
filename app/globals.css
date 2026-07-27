@@ -764,6 +764,20 @@ a[href] {
 .plan-card-bot {
   --card-accent: #10a37f;
 }
+/* Same rule as .landing-card-bot, applied to the two chains whose marks the
+   pastel set actively contradicts. A network card tints its logo well and its
+   live badge from --card-accent, so BNB on `mint` showed a gold coin over a
+   green dot and Kava on `peach` a coral mark over an orange one. These are the
+   brand colors (BNB #f0b90b, Kava #ff564f) darkened for the light theme, where
+   the badge renders the accent as text. */
+.landing-card-gold,
+.plan-card-gold {
+  --card-accent: #b8860b;
+}
+.landing-card-crimson,
+.plan-card-crimson {
+  --card-accent: #e0463f;
+}
 
 /* Dark mode lifts each accent so it reads as emitted light, not paint */
 .dark .landing-card-mint,
@@ -789,6 +803,15 @@ a[href] {
 .dark .landing-card-bot,
 .dark .plan-card-bot {
   --card-accent: #14c79a;
+}
+/* On dark the badge sits on a dark bed, so both can go back to the brand values. */
+.dark .landing-card-gold,
+.dark .plan-card-gold {
+  --card-accent: #f0b90b;
+}
+.dark .landing-card-crimson,
+.dark .plan-card-crimson {
+  --card-accent: #ff6b64;
 }
 
 /* --- Shared parts that live inside a card --- */
@@ -896,6 +919,30 @@ a[href] {
     transform: scale(2.6);
     opacity: 0;
   }
+}
+
+/* A network the operator has taken out of service.
+   The badge stops borrowing --card-accent, because a dot pulsing in the chain's
+   own brand color reads as "live" whatever word sits next to it — the accent is
+   what makes the live state legible at a glance, so the paused state has to give
+   it up. Amber matches the "Paused" badge in the network switcher (.nsw-badge),
+   so the landing page and the app never describe one pause two ways.
+   Applies to .nw-live (grid tiles) and .nw-lead-kicker (the partner card) alike:
+   both are accent-tinted pills wrapping the same .nw-live-dot. */
+.nw-live-paused {
+  border-color: rgb(251 191 36 / 0.32);
+  background: rgb(251 191 36 / 0.15);
+  color: rgb(245 158 11);
+}
+.nw-live-off {
+  border-color: color-mix(in srgb, var(--hero-muted) 26%, transparent);
+  background: color-mix(in srgb, var(--hero-muted) 10%, transparent);
+  color: color-mix(in srgb, var(--hero-muted) 80%, var(--foreground));
+}
+.nw-live-paused .nw-live-ping,
+.nw-live-off .nw-live-ping {
+  animation: none;
+  opacity: 0;
 }
 
 /* --- Lead network card (BOT Chain, WhyBase) ---
@@ -1233,6 +1280,15 @@ a[href] {
 
 .nw-cta-copy {
   max-width: 42rem;
+}
+
+/* The CTA is centred against the copy block by the card's own align-items, so it
+   must not opt out with align-self. It does need to keep its intrinsic width —
+   the copy beside it is the flexible half. */
+.nw-cta-action {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
 }
 
 .nw-cta-kicker {
