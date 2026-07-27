@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
 import { useAccount, useWriteContract } from "wagmi";
-import { useContracts } from "@/app/hooks";
+import { useContracts, useStableSymbol } from "@/app/hooks";
 import { useDashboardStore, type DashboardPlanRecord } from "@/app/store/useDashboardStore";
 import { ExecuteSwapButton } from "../dca/ExecuteSwapButton";
 import {
@@ -153,6 +153,7 @@ function SchedulePlanCard({
   cardIndex: number;
 }) {
   const theme = PLAN_CARD_THEMES[cardIndex % PLAN_CARD_THEMES.length];
+  const stable = useStableSymbol();
   const backendChainClockOffsetSeconds = useDashboardStore(
     (state) => state.backendChainClockOffsetSeconds,
   );
@@ -282,7 +283,7 @@ function SchedulePlanCard({
 
         <div className="pc-main">
           <p className="pc-route">
-            <span>${plan.amountPerInterval} USDC</span>
+            <span>${plan.amountPerInterval} {stable}</span>
             <svg className="pc-route-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M5 12h14m-5-5 5 5-5 5" />
             </svg>
@@ -432,6 +433,7 @@ function SchedulePlanCard({
 const CREATE_CARD_BARS = ["24%", "38%", "31%", "52%", "46%", "72%", "100%"];
 
 function CreatePlanCard({ onAddPlan }: { onAddPlan?: () => void }) {
+  const stable = useStableSymbol();
   return (
     <div className="pn-empty">
       <svg className="pn-dash" aria-hidden>
@@ -448,7 +450,7 @@ function CreatePlanCard({ onAddPlan }: { onAddPlan?: () => void }) {
 
         <h3 className="pn-title">Start your first steady buy</h3>
         <p className="pn-body">
-          Pick an asset, a USDC amount, and how often to buy. Every tick of the schedule swaps the
+          Pick an asset, a {stable} amount, and how often to buy. Every tick of the schedule swaps the
           same amount — so the position builds itself while you get on with your day.
         </p>
 

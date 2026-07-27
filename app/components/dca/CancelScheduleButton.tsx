@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useChainId, usePublicClient } from "wagmi";
-import { useDCAVault, useDCASchedule, useContracts } from "@/app/hooks";
+import { useDCAVault, useDCASchedule, useContracts, useStableSymbol } from "@/app/hooks";
 import { calculateEarlyFee, shouldChargeEarlyFee } from "@/lib/constants";
 import { formatUnits } from "viem";
 import { parseTxError } from "@/lib/parse-tx-error";
@@ -32,6 +32,7 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
   const chainId = useChainId();
   const publicClient = usePublicClient();
   const { contracts } = useContracts();
+  const stable = useStableSymbol();
   const { cancelSchedule, isLoading } = useDCAVault();
   const { schedule: rawSchedule } = useDCASchedule(scheduleId);
 
@@ -111,13 +112,13 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
               </p>
               <div className="space-y-1 text-sm">
                 <p className="text-[var(--foreground)]">
-                  Remaining: {formatUnits(remainingAmount, 6)} USDC
+                  Remaining: {formatUnits(remainingAmount, 6)} {stable}
                 </p>
                 <p className="text-red-400 font-medium">
-                  Fee (3%): {formatUnits(earlyFee, 6)} USDC
+                  Fee (3%): {formatUnits(earlyFee, 6)} {stable}
                 </p>
                 <p className="text-green-400 font-medium">
-                  {"You'll"} receive: {formatUnits(netReturn, 6)} USDC
+                  {"You'll"} receive: {formatUnits(netReturn, 6)} {stable}
                 </p>
               </div>
             </div>
@@ -129,7 +130,7 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
                 No early cancellation fee (over 50% already executed)
               </p>
               <p className="text-sm text-[var(--foreground)] mt-1">
-                {"You'll"} receive: {formatUnits(remainingAmount, 6)} USDC
+                {"You'll"} receive: {formatUnits(remainingAmount, 6)} {stable}
               </p>
             </div>
           )}

@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useDashboardStats } from "./DashboardStatsContext";
+import { useStableSymbol } from "@/app/hooks";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
 import { LoadingCard } from "../LoadingComponents";
 
@@ -28,6 +29,7 @@ function CustomTooltip({
   payload?: Array<{ payload: ChartDataPoint }>;
   label?: string;
 }) {
+  const stable = useStableSymbol();
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
   return (
@@ -37,7 +39,7 @@ function CustomTooltip({
         className="mt-0.5 text-sm font-semibold tabular-nums"
         style={{ color: "var(--hero-primary)" }}
       >
-        ${p.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+        ${p.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {stable}
       </p>
       {p.added != null && p.added > 0 && (
         <p className="mt-0.5 text-xs text-[var(--hero-muted)]">
@@ -55,6 +57,7 @@ export function DashboardCharts({ onAddPlan }: { onAddPlan?: () => void }) {
     isLoadingStats,
     activePlanCount,
   } = useDashboardStats();
+  const stable = useStableSymbol();
   const historyPoints = useDashboardStore((state) => state.historyPoints);
   const isLoading = useDashboardStore((state) => state.isLoading);
 
@@ -118,7 +121,7 @@ export function DashboardCharts({ onAddPlan }: { onAddPlan?: () => void }) {
               Your funding activity will appear here
             </p>
             <p className="mt-1 text-xs text-[var(--hero-muted)]/80">
-              Create a plan and this chart will show how much USDC you have committed over time.
+              Create a plan and this chart will show how much {stable} you have committed over time.
             </p>
             {onAddPlan && (
               <button type="button" onClick={onAddPlan} className="dashboard-empty-action">
@@ -175,8 +178,8 @@ export function DashboardCharts({ onAddPlan }: { onAddPlan?: () => void }) {
           </div>
           <p className="text-xs text-[var(--hero-muted)] sm:text-sm">
             {isHistoryMode
-              ? "Deposited USDC over time"
-              : "Committed USDC by plan"}
+              ? `Deposited ${stable} over time`
+              : `Committed ${stable} by plan`}
           </p>
         </div>
 
@@ -249,7 +252,7 @@ export function DashboardCharts({ onAddPlan }: { onAddPlan?: () => void }) {
               : `Total committed: $${totalDeposited.toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
-                })} USDC across ${depositsPerPlan.length} plan${depositsPerPlan.length !== 1 ? "s" : ""}.`}
+                })} ${stable} across ${depositsPerPlan.length} plan${depositsPerPlan.length !== 1 ? "s" : ""}.`}
           </p>
           <p>This is plan funding, not the live market value of purchased tokens.</p>
         </div>

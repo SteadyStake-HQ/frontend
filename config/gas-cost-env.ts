@@ -70,17 +70,30 @@ export const EXECUTE_SWAP_GAS_LIMIT = 400_000n;
 export const RECORD_EXECUTION_GAS_LIMIT = 100_000n;
 
 /**
- * What a run actually burns across both transactions — the figure the relayer is really billed
- * for, and the one to multiply by gas price.
+ * What a run burns across both transactions, assumed until the relayer has measured it.
  *
- * Anchored to measurement, not to the limits above: on BOT Chain at 20 gwei a run costs about
- * 0.004 native, which puts both transactions together near this number. The gas a fixed contract
- * call burns barely moves; what moves — and what makes a run cost more on one network than
- * another — is gas price and token price, and both of those are read live per chain rather than
- * tabulated here (see app/hooks/useRunCost.ts). Re-measure from receipts if the vault's swap path
- * changes materially.
+ * This is a seed, not the answer. The live figure comes from the backend, which records the gas
+ * of every completed run and serves the median per chain (backend/src/gas-profile.ts, read here
+ * via /api/gas-profile → app/hooks/useRunCost.ts). These values only fill the window before a
+ * chain has run, or while the backend is unreachable.
+ *
+ * They replaced a single 200,000 shared by every network. Measured on BOT Chain mainnet from
+ * relayer receipts, that was low: executeSwap ran 187k–239k and recordExecution 43k–51k, putting
+ * a real run at 239k–290k. Keep these in step with SEED_GAS_UNITS in backend/src/gas-profile.ts.
  */
-export const GAS_UNITS_PER_RUN = 200_000n;
+const SEED_GAS_UNITS_BY_CHAIN: Record<number, bigint> = {
+  677: 260_000n, // BOT Chain mainnet, median of measured receipts rounded up
+  968: 260_000n, // BOT Chain testnet — same contracts, same swap path
+};
+
+/** Seed for a chain that has neither measurements nor an entry above. */
+const DEFAULT_SEED_GAS_UNITS = 250_000n;
+
+/** Gas units per run to assume for a chain before the backend has measured one. */
+export function getSeedGasUnitsPerRun(chainId: number | undefined): bigint {
+  if (chainId == null) return DEFAULT_SEED_GAS_UNITS;
+  return SEED_GAS_UNITS_BY_CHAIN[chainId] ?? DEFAULT_SEED_GAS_UNITS;
+}
 
 export function getAllGasCostConfig(): Record<number, number> {
   const out: Record<number, number> = {};

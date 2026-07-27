@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useGasPrice } from "wagmi";
 import { formatUnits } from "viem";
-import { GAS_UNITS_PER_RUN } from "@/config/gas-cost-env";
+import { getSeedGasUnitsPerRun } from "@/config/gas-cost-env";
 
 /**
  * What one scheduled run costs, measured rather than tabulated.
@@ -11,8 +11,9 @@ import { GAS_UNITS_PER_RUN } from "@/config/gas-cost-env";
  * Gas is not one number: it is the chain's live gas price times the gas two transactions burn,
  * valued in the token that chain charges in. All three differ per network and two of them move
  * minute to minute, so a hardcoded "0.004 BOT per run" is wrong on every chain but one and goes
- * stale on that one too. This reads the gas price from each network and the token price from
- * /api/native-price, so the breakdown a user is shown is the breakdown as it stands right now.
+ * stale on that one too. Every input is now read rather than tabulated: gas price from the
+ * network, token price from /api/native-price, and the gas units from /api/gas-profile — which
+ * the relayer derives from the receipts of real runs instead of anyone estimating them.
  *
  * The tank is still charged the flat on-chain gasCostPerExecutionUsdc6 — this explains where that
  * figure comes from, and shows honestly when the network has drifted away from it.
@@ -51,6 +52,49 @@ export function useNativePriceUsd(chainId: number | undefined): {
   return { usd: data?.usd ?? null, source: data?.source ?? null, isLoading: enabled && isLoading };
 }
 
+/** Whether the gas-units figure came from real runs or from the pre-measurement seed. */
+export type GasUnitsSource = "measured" | "seed";
+
+/**
+ * Gas one run burns on a chain, as measured by the relayer. Falls back to that chain's seed
+ * whenever the backend has nothing to say, so this never resolves to null and the modal always
+ * has a number to multiply.
+ */
+export function useRunGasUnits(chainId: number | undefined): {
+  gasUnits: bigint;
+  source: GasUnitsSource;
+  samples: number;
+} {
+  const enabled = Boolean(chainId && chainId > 0);
+  const { data } = useQuery({
+    queryKey: ["gas-profile", chainId],
+    enabled,
+    // Only a completed run changes this, and runs are minutes apart at best.
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+    retry: 1,
+    queryFn: async () => {
+      const res = await fetch(`/api/gas-profile?chainId=${chainId}`);
+      if (!res.ok) return null;
+      return (await res.json()) as {
+        gasUnitsPerRun?: number;
+        samples?: number;
+        source?: GasUnitsSource;
+      };
+    },
+  });
+
+  const units = data?.gasUnitsPerRun;
+  if (typeof units === "number" && Number.isFinite(units) && units > 0) {
+    return {
+      gasUnits: BigInt(Math.round(units)),
+      source: data?.source === "measured" ? "measured" : "seed",
+      samples: data?.samples ?? 0,
+    };
+  }
+  return { gasUnits: getSeedGasUnitsPerRun(chainId), source: "seed", samples: 0 };
+}
+
 export interface RunCostBreakdown {
   /** Live gas price on this chain, in wei. */
   gasPriceWei: bigint | null;
@@ -62,6 +106,12 @@ export interface RunCostBreakdown {
   nativeUsd: number | null;
   /** Which feed that price came from — a market quote and a configured one are not the same claim. */
   nativeSource: PriceSource;
+  /** Gas both transactions burn, measured from real runs where the relayer has any. */
+  gasUnits: bigint;
+  /** Whether those units are measured or still the seed. */
+  gasUnitsSource: GasUnitsSource;
+  /** How many runs the measured figure is drawn from. 0 while seeded. */
+  gasUnitsSamples: number;
   /** What a run costs the relayer right now, in USD. Null unless both inputs resolved. */
   liveUsd: number | null;
   isLoading: boolean;
@@ -85,8 +135,14 @@ export function useRunCostBreakdown(chainId: number | undefined): RunCostBreakdo
     isLoading: priceLoading,
   } = useNativePriceUsd(chainId);
 
+  const {
+    gasUnits,
+    source: gasUnitsSource,
+    samples: gasUnitsSamples,
+  } = useRunGasUnits(chainId);
+
   const feeNative =
-    gasPriceWei != null ? Number(formatUnits(gasPriceWei * GAS_UNITS_PER_RUN, 18)) : null;
+    gasPriceWei != null ? Number(formatUnits(gasPriceWei * gasUnits, 18)) : null;
   const liveUsd = feeNative != null && nativeUsd != null ? feeNative * nativeUsd : null;
 
   return {
@@ -95,6 +151,9 @@ export function useRunCostBreakdown(chainId: number | undefined): RunCostBreakdo
     feeNative,
     nativeUsd,
     nativeSource,
+    gasUnits,
+    gasUnitsSource,
+    gasUnitsSamples,
     liveUsd,
     isLoading: gasLoading || priceLoading,
   };

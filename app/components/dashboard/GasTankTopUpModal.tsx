@@ -18,14 +18,13 @@ import {
   getChainsWithGasTank,
 } from "@/app/hooks/useGasTank";
 import { GAS_TANK_ABI, ERC20_ABI } from "@/config/abis";
-import { getContracts } from "@/config/contracts";
+import { getContracts, getStableSymbol } from "@/config/contracts";
 import {
   useRunCostBreakdown,
   formatNativeAmount,
   formatUsdPrice,
 } from "@/app/hooks/useRunCost";
 import { CHAIN_ICON_URLS, getNativeSymbol } from "@/config/wagmi";
-import { GAS_UNITS_PER_RUN } from "@/config/gas-cost-env";
 import { CHAIN_NAMES } from "@/lib/constants";
 import { formatUnits, parseUnits } from "viem";
 import { parseTxError } from "@/lib/parse-tx-error";
@@ -134,7 +133,7 @@ function ChainMark({ chainId, className }: { chainId: number; className?: string
 /**
  * Where the per-run price comes from, for the network currently selected.
  *
- * The tank is held in USDC, but nothing on chain is paid in USDC: the relayer signs two
+ * The tank is held in a stablecoin, but nothing on chain is paid in it: the relayer signs two
  * transactions for every scheduled run — the swap itself, and the recordExecution that debits
  * this tank — and pays for both in the network's own token. The price the tank is charged is
  * those two fees valued at that token's USD price, which is the only reason a run on a chain
@@ -155,9 +154,19 @@ function RunCostExplainer({
 }) {
   const [open, setOpen] = useState(false);
   const symbol = getNativeSymbol(chainId);
+  const stable = getStableSymbol(chainId);
   const chainName = CHAIN_NAMES[chainId] ?? `Chain ${chainId}`;
-  const { feeNative, nativeUsd, nativeSource, liveUsd, gasPriceGwei, isLoading } =
-    useRunCostBreakdown(chainId);
+  const {
+    feeNative,
+    nativeUsd,
+    nativeSource,
+    liveUsd,
+    gasPriceGwei,
+    gasUnits,
+    gasUnitsSource,
+    gasUnitsSamples,
+    isLoading,
+  } = useRunCostBreakdown(chainId);
 
   const chargedUsd = Number(formatUnits(costPerRunUsdc6, 6));
   const charged = formatGasAmount(chargedUsd);
@@ -173,8 +182,8 @@ function RunCostExplainer({
     if (Math.abs(drift) < 0.25) return null;
     const live = formatGasAmount(liveUsd);
     return drift > 0
-      ? `${symbol} or gas has risen since the rate was set — a run costs the relayer about ${live} USDC today, and you are still charged ${charged}.`
-      : `Gas is cheaper than when the rate was set — a run costs the relayer about ${live} USDC today, against the ${charged} charged.`;
+      ? `${symbol} or gas has risen since the rate was set — a run costs the relayer about ${live} ${stable} today, and you are still charged ${charged}.`
+      : `Gas is cheaper than when the rate was set — a run costs the relayer about ${live} ${stable} today, against the ${charged} charged.`;
   })();
 
   return (
@@ -191,7 +200,7 @@ function RunCostExplainer({
           <span className="gt-why-chain">on {chainName}</span>
         </span>
         <span className="gt-why-price">
-          {charged} <small>USDC</small>
+          {charged} <small>{stable}</small>
         </span>
         <svg className="gt-why-chev" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M19 9l-7 7-7-7" />
@@ -244,14 +253,14 @@ function RunCostExplainer({
               <dt>
                 Charged to your tank <span>flat rate, set on-chain</span>
               </dt>
-              <dd>{charged} USDC</dd>
+              <dd>{charged} {stable}</dd>
             </div>
           </dl>
 
           <p className="gt-why-note">
             Each run is two transactions our relayer signs and pays for in {symbol} — the swap on{" "}
             {chainName}, and the record that debits this tank. Their combined fee at {symbol}&apos;s
-            USD price is what the {charged} USDC covers. It is a flat rate, not a meter: a run that
+            USD price is what the {charged} {stable} covers. It is a flat rate, not a meter: a run that
             costs the relayer more never charges you extra.
           </p>
 
@@ -259,9 +268,12 @@ function RunCostExplainer({
 
           {gasPriceGwei != null && (
             <p className="gt-why-meta">
-              Live gas price {formatNativeAmount(gasPriceGwei)} gwei · ≈
-              {Number(GAS_UNITS_PER_RUN).toLocaleString("en-US")} gas burned per run · re-read
-              while this stays open.
+              Live gas price {formatNativeAmount(gasPriceGwei)} gwei ·{" "}
+              {Number(gasUnits).toLocaleString("en-US")} gas per run{" "}
+              {gasUnitsSource === "measured"
+                ? `(measured from the last ${gasUnitsSamples} run${gasUnitsSamples === 1 ? "" : "s"})`
+                : "(estimated — no runs measured yet)"}{" "}
+              · re-read while this stays open.
             </p>
           )}
           </div>
@@ -301,6 +313,8 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
   const contractsForChain = getContracts(selectedChainId);
   const gasTankAddr = contractsForChain?.GasTank;
   const usdcAddr = contractsForChain?.MockUSDC;
+  /** Label for the tank's stablecoin on the network being topped up — USDT on BOT Chain. */
+  const stable = getStableSymbol(selectedChainId);
   const hasGasTank = Boolean(gasTankAddr && gasTankAddr !== ZERO && usdcAddr && usdcAddr !== ZERO);
 
   const publicClient = usePublicClient({ chainId: selectedChainId });
@@ -471,7 +485,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
       setAmount("");
       await refreshGasTank();
       setStage("done");
-      toast.success(`${gasAmountFromUsdc6(deposited)} USDC added to your gas tank.`);
+      toast.success(`${gasAmountFromUsdc6(deposited)} ${stable} added to your gas tank.`);
 
       window.setTimeout(() => {
         setStage(null);
@@ -501,7 +515,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
       ? [
           {
             id: "approving" as const,
-            label: "Approve USDC",
+            label: `Approve ${stable}`,
             note: "Lets the gas tank pull exactly this amount — nothing more.",
           },
         ]
@@ -524,12 +538,12 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
     : amountWei <= 0n
       ? "Enter an amount"
       : overBalance
-        ? "Not enough USDC"
+        ? `Not enough ${stable}`
         : needsSwitch
           ? `Switch, approve & deposit`
           : needsApproval
             ? "Approve & deposit"
-            : `Deposit ${formatGasAmount(Number(formatUnits(amountWei, 6)))} USDC`;
+            : `Deposit ${formatGasAmount(Number(formatUnits(amountWei, 6)))} ${stable}`;
 
   return (
     <>
@@ -591,7 +605,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                   <p className="gt-hero-label">Total balance</p>
                   <p className="gt-hero-value">
                     <AnimatedGasAmount valueUsdc6={totalBalanceUsdc6} />
-                    <small>USDC</small>
+                    <small>{stable}</small>
                   </p>
                   <p className="gt-hero-note">
                     {isEmpty
@@ -683,7 +697,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                         setError(null);
                       }}
                       className="gt-amount-input"
-                      aria-label="Amount of USDC to deposit"
+                      aria-label={`Amount of ${stable} to deposit`}
                     />
                     <button
                       type="button"
@@ -712,7 +726,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                       </button>
                     ))}
                     <span className="gt-quick-note">
-                      {usdcBalance ? `${gasAmountFromUsdc6(walletUsdc)} USDC in wallet` : " "}
+                      {usdcBalance ? `${gasAmountFromUsdc6(walletUsdc)} ${stable} in wallet` : " "}
                     </span>
                   </div>
 
@@ -722,12 +736,12 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                       Buys about <b>{runsBought > 9999 ? "9,999+" : runsBought.toLocaleString("en-US")}</b> scheduled runs
-                      {" "}({formatGasAmount(Number(formatUnits(costPerRunUsdc6, 6)))} USDC each).
+                      {" "}({formatGasAmount(Number(formatUnits(costPerRunUsdc6, 6)))} {stable} each).
                     </p>
                   )}
                   {overBalance && (
                     <p className="gt-hint gt-hint-warn">
-                      That is more than the {gasAmountFromUsdc6(walletUsdc)} USDC you hold on{" "}
+                      That is more than the {gasAmountFromUsdc6(walletUsdc)} {stable} you hold on{" "}
                       {CHAIN_NAMES[selectedChainId] ?? "this network"}.
                     </p>
                   )}
@@ -778,10 +792,10 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                 </span>
                 <p className="gt-done-title">Tank topped up</p>
                 <p className="gt-done-amount">
-                  +{gasAmountFromUsdc6(addedUsdc6)} <small>USDC</small>
+                  +{gasAmountFromUsdc6(addedUsdc6)} <small>{stable}</small>
                 </p>
                 <p className="gt-done-sub">
-                  New balance <b>{gasAmountFromUsdc6(totalBalanceUsdc6)} USDC</b> — updated everywhere.
+                  New balance <b>{gasAmountFromUsdc6(totalBalanceUsdc6)} {stable}</b> — updated everywhere.
                 </p>
               </div>
             ) : (

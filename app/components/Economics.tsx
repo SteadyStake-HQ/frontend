@@ -3,8 +3,15 @@
 import { useState } from "react";
 import { RevealOnScroll } from "./RevealOnScroll";
 import { Card3D } from "./Card3D";
+import { DEFAULT_CHAIN_ID, getStableSymbol } from "@/config/contracts";
 
-/** Default gas cost per execution (USDC). Configurable per network — see config/gas-cost-env.ts. */
+/**
+ * The landing page has no wallet to read, so it names the default network's settlement
+ * stablecoin — "USDT" while BOT Chain leads the network list, "USDC" elsewhere.
+ */
+const STABLE = getStableSymbol(DEFAULT_CHAIN_ID);
+
+/** Default gas cost per execution, in that stablecoin. Per network — see config/gas-cost-env.ts. */
 const COST_PER_RUN = 0.01;
 /** We ask users to hold runs x cost x this, so a volatile network can never strand a plan. */
 const GAS_BUFFER = 3;
@@ -85,7 +92,7 @@ function Receipt() {
         <div className="ec-line ec-line-muted">
           <dt>
             Gas Tank you hold
-            <span className="ec-line-note">{GAS_BUFFER}x safety buffer — unspent USDC is withdrawable</span>
+            <span className="ec-line-note">{GAS_BUFFER}x safety buffer — unspent {STABLE} is withdrawable</span>
           </dt>
           <dd>{usd(gasHeld)}</dd>
         </div>
@@ -138,7 +145,7 @@ const FLOWS = [
     theme: "peach" as const,
     tag: "Prepaid",
     title: "Gas Tank",
-    body: "One USDC balance, shared across every network. Each run deducts a fixed amount and reimburses the relayer that paid the on-chain gas.",
+    body: `One ${STABLE} balance, shared across every network. Each run deducts a fixed amount and reimburses the relayer that paid the on-chain gas.`,
     meter: 12,
     meterLabel: "Fixed cost per execution",
   },

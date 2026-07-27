@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useAccount, useConfig } from "wagmi";
 import { formatUnits } from "viem";
-import { useDCASchedule, useContracts, usePlanExecutions, type PlanExecution } from "@/app/hooks";
+import { useDCASchedule, useContracts, useStableSymbol, usePlanExecutions, type PlanExecution } from "@/app/hooks";
 import { DCA_FREQUENCY_INTERVALS } from "@/app/hooks/useDCAHelpers";
 import { Header } from "@/app/components/Header";
 import { CancelScheduleButton } from "@/app/components/dca/CancelScheduleButton";
@@ -260,6 +260,7 @@ export default function PlanPage() {
   const params = useParams();
   const { address, isConnected } = useAccount();
   const { chainId } = useContracts();
+  const stable = useStableSymbol();
   const wagmiConfig = useConfig();
   const { tokens: supportedTokens } = useSupportedTokens(chainId);
   const scheduleId = parseScheduleIdFromParams(params);
@@ -523,7 +524,7 @@ export default function PlanPage() {
           <div className="pl-title">
             <h1>{plan.token} DCA Plan</h1>
             <p className="pl-route">
-              <strong>{usd(plan.amountPerRun)} USDC</strong>
+              <strong>{usd(plan.amountPerRun)} {stable}</strong>
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14m-5-5 5 5-5 5" />
               </svg>
@@ -592,7 +593,7 @@ export default function PlanPage() {
                 Per buy
               </dt>
               <dd>
-                {usd(plan.amountPerRun)} <small>USDC</small>
+                {usd(plan.amountPerRun)} <small>{stable}</small>
               </dd>
             </div>
 
@@ -658,7 +659,7 @@ export default function PlanPage() {
                 </span>
               </div>
               {/* The hold is off-chain and never touches the deposit, so the owner keeps the one
-                  action that is unambiguously theirs: cancelling and taking their USDC back. */}
+                  action that is unambiguously theirs: cancelling and taking their deposit back. */}
               {address && <CancelScheduleButton scheduleId={scheduleId} />}
             </>
           ) : plan.status === "active" && address ? (
@@ -686,7 +687,7 @@ export default function PlanPage() {
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18 18 6M6 6l12 12" />
               </svg>
-              This plan was cancelled. Any unspent USDC was returned to your wallet.
+              This plan was cancelled. Any unspent {stable} was returned to your wallet.
             </div>
           ) : (
             <div className="pl-closed pl-closed-ended">
@@ -790,6 +791,7 @@ function PlanHistory({
   explorerBaseUrl?: string;
   now: number;
 }) {
+  const stable = useStableSymbol();
   if (plan.executedCount === 0 && plan.status !== "active") {
     return (
       <div className="pl-empty">
@@ -870,7 +872,7 @@ function PlanHistory({
                 {usd(
                   row.usdcAmount != null ? Number(formatUnits(row.usdcAmount, 6)) : plan.amountPerRun,
                 )}{" "}
-                USDC
+                {stable}
                 {row.tokenOut != null && row.tokenOut > 0n && (
                   <>
                     <span>→</span>
@@ -914,7 +916,7 @@ function PlanHistory({
               <div className="pl-row-title">
                 Buy #{run.index}
                 <span>·</span>
-                {usd(plan.amountPerRun)} USDC
+                {usd(plan.amountPerRun)} {stable}
               </div>
               <p className="pl-row-meta">
                 {run.due ? "Due now" : `Expected ${fullDateTime(run.at)}`}

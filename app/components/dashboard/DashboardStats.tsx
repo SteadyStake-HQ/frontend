@@ -2,6 +2,7 @@
 
 import { useState, useEffect, type ReactNode } from "react";
 import { useDashboardStats } from "./DashboardStatsContext";
+import { useStableSymbol } from "@/app/hooks/useContracts";
 import { Card3D } from "../Card3D";
 
 /** Compact skeleton for stat number (single line) */
@@ -66,11 +67,12 @@ export function DashboardStats() {
     activePlanCount,
     isLoadingStats,
   } = useDashboardStats();
+  const stable = useStableSymbol();
 
   const stats = [
     {
       label: "Ready to invest",
-      value: isLoadingBalance ? null : `${usdcBalance} USDC`,
+      value: isLoadingBalance ? null : `${usdcBalance} ${stable}`,
       sub: "Available in your wallet",
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -83,7 +85,7 @@ export function DashboardStats() {
     {
       label: "Plan funding",
       value: isLoadingStats ? null : totalDeposited > 0 ? `$${totalDeposited.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—",
-      sub: "USDC committed across plans",
+      sub: `${stable} committed across plans`,
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M4 18V9m5 9V5m6 13v-7m5 7V3" />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useAccount } from "wagmi";
-import { useDCAVaultRead, useDCASchedule, useContracts } from "@/app/hooks";
+import { useDCAVaultRead, useDCASchedule, useContracts, useStableSymbol } from "@/app/hooks";
 import { REVERSE_FREQUENCY_MAP, getTokenSymbolForAddress } from "@/lib/constants";
 import { CancelScheduleButton } from "./CancelScheduleButton";
 import { formatUnits } from "viem";
@@ -59,6 +59,7 @@ interface ScheduleCardProps {
 
 const ScheduleCard = ({ scheduleId, userAddress }: ScheduleCardProps) => {
   const { chainId } = useContracts();
+  const stable = useStableSymbol();
   const { schedule, isReady, isLoading } = useDCASchedule(scheduleId, userAddress);
 
   if (isLoading || !schedule) {
@@ -90,11 +91,11 @@ const ScheduleCard = ({ scheduleId, userAddress }: ScheduleCardProps) => {
         </div>
         <div>
           <p className="text-sm text-gray-600">Amount Per Interval</p>
-          <p className="text-lg font-semibold text-gray-800">{amountPerInterval} USDC</p>
+          <p className="text-lg font-semibold text-gray-800">{amountPerInterval} {stable}</p>
         </div>
         <div>
           <p className="text-sm text-gray-600">Total deposited</p>
-          <p className="text-lg font-semibold text-gray-800">{originalTotalNum.toFixed(2)} USDC</p>
+          <p className="text-lg font-semibold text-gray-800">{originalTotalNum.toFixed(2)} {stable}</p>
         </div>
         <div>
           <p className="text-sm text-gray-600">Executed / Total</p>
@@ -105,7 +106,7 @@ const ScheduleCard = ({ scheduleId, userAddress }: ScheduleCardProps) => {
         <div>
           <p className="text-sm text-gray-600">Remaining</p>
           <p className="text-lg font-semibold text-blue-600">
-            {remainingNum.toFixed(2)} USDC
+            {remainingNum.toFixed(2)} {stable}
           </p>
         </div>
       </div>

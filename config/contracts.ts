@@ -399,6 +399,27 @@ export function getTokenList(chainId: number): TokenListEntry[] {
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
+/**
+ * Display symbol of the settlement stablecoin the vault holds on a chain. The code calls the slot
+ * `MockUSDC` for historical reasons, but BOT Chain has no USDC — bridged USDT fills it — so every
+ * user-facing label must come from here rather than the literal "USDC".
+ */
+const STABLE_SYMBOL_BY_CHAIN: Record<number, string> = {
+  677: "USDT",
+  968: "USDT",
+};
+
+/**
+ * A chain deployed from the mock stack (`DeployBotTestnetWithMockUSDC`) really does hold MockUSDC,
+ * so a recorded MockUSDC address overrides the table above. Mirrors `getStableSymbol()` in
+ * backend/src/config.ts — keep the two in step.
+ */
+export function getStableSymbol(chainId: number): string {
+  const mock = BY_CHAIN[String(chainId)]?.MockUSDC;
+  if (mock && mock !== ZERO_ADDRESS) return "USDC";
+  return STABLE_SYMBOL_BY_CHAIN[chainId] ?? "USDC";
+}
+
 export interface ChainContracts {
   chainId: number;
   DCAVault: string;

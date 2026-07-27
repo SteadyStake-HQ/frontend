@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useChainId } from "wagmi";
 import {
   getContracts,
+  getStableSymbol,
   CONTRACTS,
   DEFAULT_CHAIN_ID,
   isSupportedChain,
@@ -33,4 +34,14 @@ export function useContracts(): {
     contracts,
     isSupported: chainId !== undefined && isSupportedChain(chainId),
   };
+}
+
+/**
+ * Display symbol of the stablecoin the vault actually settles in on the connected chain — "USDC"
+ * on most networks, "USDT" on BOT Chain. Keyed off `contracts.chainId` rather than the connected
+ * chain so the label always matches the addresses the UI is reading.
+ */
+export function useStableSymbol(): string {
+  const { contracts } = useContracts();
+  return getStableSymbol(contracts.chainId);
 }

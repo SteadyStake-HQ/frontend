@@ -1,5 +1,12 @@
 import { RevealOnScroll } from "./RevealOnScroll";
 import { Card3D } from "./Card3D";
+import { DEFAULT_CHAIN_ID, getStableSymbol } from "@/config/contracts";
+
+/**
+ * The landing page has no wallet to read, so it names the default network's settlement
+ * stablecoin — "USDT" while BOT Chain leads the network list, "USDC" elsewhere.
+ */
+const STABLE = getStableSymbol(DEFAULT_CHAIN_ID);
 
 /* ---------------------------------------------------------------
    Pipeline geometry. Nodes sit on one straight rail, so the moving
@@ -11,7 +18,7 @@ const RAIL_START = NODE_X[0];
 const RAIL_END = NODE_X[3];
 
 const NODES = [
-  { label: "Fund", caption: "USDC into your vault", actor: "you" },
+  { label: "Fund", caption: `${STABLE} into your vault`, actor: "you" },
   { label: "Configure", caption: "Token · amount · frequency", actor: "you" },
   { label: "Execute", caption: "On schedule, from your vault", actor: "us" },
   { label: "Accumulate", caption: "Tokens land back in your vault", actor: "you" },
@@ -179,8 +186,8 @@ const STEPS = [
     title: "Fund it once",
     lead: "Two balances, both yours.",
     rows: [
-      { k: "DCA capital", v: "USDC you want to invest" },
-      { k: "Gas Tank", v: "Prepaid USDC for execution" },
+      { k: "DCA capital", v: `${STABLE} you want to invest` },
+      { k: "Gas Tank", v: `Prepaid ${STABLE} for execution` },
     ],
     foot: "One Gas Tank balance covers every network.",
   },

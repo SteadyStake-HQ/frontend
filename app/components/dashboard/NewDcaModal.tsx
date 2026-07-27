@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { useAccount, useBalance, useReadContract, useReadContracts, useWaitForTransactionReceipt } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
-import { useDCAVault, useDCAVaultRead, useTokenApproval, useTokenAllowance, useContracts, useGasTank, useGasTankAllChains, useGasTankLevel, useGasTankRefresh, useGasCostPerExecutionForChain, requiredGasUsdc6Exact } from "@/app/hooks";
+import { useDCAVault, useDCAVaultRead, useTokenApproval, useTokenAllowance, useContracts, useStableSymbol, useGasTank, useGasTankAllChains, useGasTankLevel, useGasTankRefresh, useGasCostPerExecutionForChain, requiredGasUsdc6Exact } from "@/app/hooks";
 import { GasTankGauge, formatGasAmount } from "./GasTankVisuals";
 import { getGasCostPerRunUsd } from "@/config/gas-cost-env";
 import { CHAIN_NAMES, FREQUENCY_MAP } from "@/lib/constants";
@@ -38,12 +38,13 @@ const usd = (n: number, dp = 2) =>
   n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
 
 /**
- * Gas tank amounts, in USDC. Gas is cents-scale — 0.001/run on cheap chains — so a plain 2dp
- * format renders a 0.025 balance as "0.03" and makes a drained tank look untouched. Shares
- * formatGasAmount with the tank pill and the top-up modal: the same balance is on screen in
- * three places at once and it would read as three different numbers if each rounded its own way.
+ * Gas tank amounts, in the chain's settlement stablecoin (USDC, or USDT on BOT Chain). Gas is
+ * cents-scale — 0.001/run on cheap chains — so a plain 2dp format renders a 0.025 balance as
+ * "0.03" and makes a drained tank look untouched. Shares formatGasAmount with the tank pill and
+ * the top-up modal: the same balance is on screen in three places at once and it would read as
+ * three different numbers if each rounded its own way.
  */
-const gasUsdc = (n: number) => `${formatGasAmount(n)} USDC`;
+const gasAmountLabel = (n: number, symbol: string) => `${formatGasAmount(n)} ${symbol}`;
 
 /** "in ~8 min" while a plan is short, a calendar date once it spans days. */
 function formatFinish(totalSeconds: number): string {
@@ -261,6 +262,9 @@ interface NewDcaModalProps {
 export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
   const { address, isConnected } = useAccount();
   const { chainId, contracts } = useContracts();
+  /** What this chain's settlement stablecoin is called — "USDT" on BOT Chain, "USDC" elsewhere. */
+  const stable = useStableSymbol();
+  const gasUsdc = (n: number) => gasAmountLabel(n, stable);
   const queryClient = useQueryClient();
   const { tokens: tokensList, isLoading: isLoadingTokens } = useSupportedTokens(chainId);
   const [token, setToken] = useState<string>("");
@@ -778,8 +782,8 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
     if (balance < totalNeeded) {
       setError(
         gasNeededAtCreate > 0n
-          ? `Insufficient USDC. You have ${balanceFormatted.toFixed(2)}. Need ${(Number(totalAmount) + requiredGasFormatted).toFixed(2)}.`
-          : `Insufficient USDC balance. You have ${balanceFormatted.toFixed(2)}, need ${parseFloat(totalAmount).toFixed(2)}`
+          ? `Insufficient ${stable}. You have ${balanceFormatted.toFixed(2)}. Need ${(Number(totalAmount) + requiredGasFormatted).toFixed(2)}.`
+          : `Insufficient ${stable} balance. You have ${balanceFormatted.toFixed(2)}, need ${parseFloat(totalAmount).toFixed(2)}`
       );
       return;
     }
@@ -957,11 +961,11 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
   const footHint = !isConnected
     ? "Connect your wallet to create a plan."
     : !amountNum
-      ? "Enter how much USDC to spend on each run."
+      ? `Enter how much ${stable} to spend on each run.`
       : runCountNum < 1
         ? "Choose how many runs this plan should make."
         : !hasEnoughBalanceForCreate
-          ? `You need $${usd(Math.max(shortfall, 0))} more USDC for this plan.`
+          ? `You need $${usd(Math.max(shortfall, 0))} more ${stable} for this plan.`
           : null;
 
   /** The steps this create will take, in order. Built from the flow captured at submit. */
@@ -970,7 +974,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
       ? [
           {
             id: "approving" as const,
-            label: "Approve USDC",
+            label: `Approve ${stable}`,
             note: "Let the vault pull the funds for this plan.",
           },
         ]
@@ -1206,7 +1210,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                         <span className="dm-balance-label">Your balance</span>
                         <span className="dm-balance-value">
                           {usd(balanceFormatted)}
-                          <small>USDC</small>
+                          <small>{stable}</small>
                         </span>
                       </span>
                     </div>
@@ -1282,7 +1286,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                           value={amountPerInterval}
                           onChange={(e) => setAmountPerInterval(e.target.value)}
                           className="dm-input"
-                          aria-label="Amount per run in USDC"
+                          aria-label={`Amount per run in ${stable}`}
                         />
                       </div>
                       <div className="dm-input-wrap dm-input-wrap-suffix">
@@ -1502,12 +1506,12 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                       {enableAutoExec && hasGasTank && requiredGasFormatted > 0 && (
                         gasAddedAtCreate ? (
                           <div className="dm-cost-row">
-                            <span>Gas, prepaid ({usd(costPerRunUsd, 3)} USDC/run)</span>
+                            <span>Gas, prepaid ({usd(costPerRunUsd, 3)} {stable}/run)</span>
                             <b>{gasUsdc(requiredGasFormatted)}</b>
                           </div>
                         ) : (
                           <div className="dm-cost-row">
-                            <span>Gas ({usd(costPerRunUsd, 3)} USDC/run)</span>
+                            <span>Gas ({usd(costPerRunUsd, 3)} {stable}/run)</span>
                             <b>from tank</b>
                           </div>
                         )
