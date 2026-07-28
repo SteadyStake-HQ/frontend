@@ -14,7 +14,7 @@ import { LoadingCard } from "@/app/components/LoadingComponents";
 import { REVERSE_FREQUENCY_MAP } from "@/lib/constants";
 import { getTokenLogoUrl } from "@/lib/token-logo";
 import { useSupportedTokens } from "@/app/hooks/useSupportedTokens";
-import type { PlanAdminControl } from "@/app/store/useDashboardStore";
+import type { PlanAdminControl, PlanExecutionGate } from "@/app/store/useDashboardStore";
 
 type PlanStatus = "active" | "cancelled" | "ended";
 
@@ -41,11 +41,14 @@ interface PlanDetails {
 
 interface BackendPlanTiming {
   chainClockOffsetSeconds: number;
+  /** When the plan can next actually run: the contract cooldown plus any paused-countdown wait. */
   dueTimestamp: number;
   ready: boolean;
   executionMode: "auto" | "manual" | null;
   /** Admin hold stopping auto-execution; null when nothing is holding the plan. */
   adminControl: PlanAdminControl | null;
+  /** Remainder of a paused countdown, running since the plan was resumed; null when free. */
+  executionGate: PlanExecutionGate | null;
 }
 
 /* ---------- formatting ---------------------------------------------------- */
@@ -300,9 +303,11 @@ export default function PlanPage() {
           plans?: Array<{
             scheduleId: string;
             dueTimestamp: number;
+            effectiveDueTimestamp?: number;
             ready: boolean;
             executionMode: "auto" | "manual" | null;
             adminControl: PlanAdminControl | null;
+            executionGate?: PlanExecutionGate | null;
           }>;
         };
         const timing = data.plans?.find(
@@ -312,10 +317,13 @@ export default function PlanPage() {
           setBackendPlanTiming({
             chainClockOffsetSeconds:
               data.chainTime - Math.floor(Date.now() / 1000),
-            dueTimestamp: timing.dueTimestamp,
+            // Prefer the effective due time: a plan resumed from a pause is still serving the wait
+            // it had left, and the contract's own cooldown elapsed during the pause.
+            dueTimestamp: timing.effectiveDueTimestamp ?? timing.dueTimestamp,
             ready: timing.ready,
             executionMode: timing.executionMode,
             adminControl: timing.adminControl ?? null,
+            executionGate: timing.executionGate ?? null,
           });
         }
       } catch {
@@ -412,8 +420,11 @@ export default function PlanPage() {
 
   const backendChainClockOffsetSeconds =
     backendPlanTiming?.chainClockOffsetSeconds ?? 0;
+  // A held plan's countdown is stopped, so the page's clock stops with it rather than running a
+  // per-second re-render down to a buy that cannot happen.
+  const backendHold = backendPlanTiming?.adminControl ?? null;
   const chainNow = useNow(
-    plan?.status === "active",
+    plan?.status === "active" && backendHold == null,
     backendChainClockOffsetSeconds,
   );
   const secondsUntilNext = plan
@@ -478,7 +489,9 @@ export default function PlanPage() {
 
   const logo = plan.tokenLogoUrl ?? logoUrlFallback;
   // Only meaningful while the plan can still run; a finished plan has no automation left to hold.
-  const hold = plan.status === "active" ? backendPlanTiming?.adminControl ?? null : null;
+  const hold = plan.status === "active" ? backendHold : null;
+  // The countdown as the hold caught it — what the plan owes, and what it resumes with.
+  const heldCountdownSeconds = hold?.cooldownRemainingSeconds ?? null;
   const statusLabel = hold
     ? hold.status === "paused"
       ? "Admin paused"
@@ -611,8 +624,36 @@ export default function PlanPage() {
           </dl>
         </div>
 
-        {/* A countdown promises the plan fires at zero. While a hold is in force it will not, so
-            the counter stands down and the hold notice below takes its place. */}
+        {/* A countdown promises the plan fires at zero. A held plan will not fire, so the counter
+            stops where the hold caught it: the same strip, standing still, showing the wait the
+            plan still owes rather than one running down to nothing. */}
+        {plan.status === "active" && hold && (
+          <div className="pl-next is-paused">
+            <span className="pl-next-icon" aria-hidden>
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.5 6.5v11M14.5 6.5v11" />
+              </svg>
+            </span>
+
+            <div className="pl-next-copy">
+              <p>Countdown stopped</p>
+              <div className="pl-next-time">
+                {heldCountdownSeconds == null
+                  ? "Paused"
+                  : heldCountdownSeconds > 0
+                    ? `${formatCountdown(heldCountdownSeconds)} left`
+                    : "Was due"}
+              </div>
+            </div>
+
+            <p className="pl-next-note">
+              {heldCountdownSeconds != null && heldCountdownSeconds > 0
+                ? "Paused with this much of the wait to go. Nothing is counting down — if an admin resumes the plan, the next buy is this far away again."
+                : "The countdown is stopped while this plan is on hold."}
+            </p>
+          </div>
+        )}
+
         {plan.status === "active" && !hold && (
           <div className="pl-next">
             <span className={`pl-next-icon ${isDue ? "is-due" : ""}`} aria-hidden>

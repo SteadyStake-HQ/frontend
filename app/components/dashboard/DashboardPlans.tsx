@@ -139,6 +139,10 @@ const HOLD_HEADLINE: Record<"paused" | "cancelled", string> = {
   cancelled: "An admin stopped automation for this plan.",
 };
 
+const PAUSED_CHIP_TITLE =
+  "The countdown stopped when this plan was paused. Nothing is running down — if an admin " +
+  "resumes it, the buy is this far away again.";
+
 function SchedulePlanCard({
   plan,
   userAddress,
@@ -161,13 +165,25 @@ function SchedulePlanCard({
     () => Math.floor(Date.now() / 1000) + backendChainClockOffsetSeconds,
   );
 
+  // A held plan has nothing to count towards, so the clock behind the card stops with it.
   useEffect(() => {
-    if (plan.status !== "active" || plan.nextExecutionTimestamp <= 0) return;
+    if (
+      plan.status !== "active" ||
+      plan.nextExecutionTimestamp <= 0 ||
+      plan.adminControl != null
+    ) {
+      return;
+    }
     const update = () =>
       setNow(Math.floor(Date.now() / 1000) + backendChainClockOffsetSeconds);
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
-  }, [plan.status, plan.nextExecutionTimestamp, backendChainClockOffsetSeconds]);
+  }, [
+    plan.status,
+    plan.nextExecutionTimestamp,
+    plan.adminControl,
+    backendChainClockOffsetSeconds,
+  ]);
 
   // The contract readiness value stored on the plan is only a snapshot from
   // the last dashboard fetch. Derive time-based readiness from the live clock
@@ -298,13 +314,35 @@ function SchedulePlanCard({
               Every {plan.frequency}
             </span>
 
-            {/* The countdown is a promise that the plan fires when it reaches zero. While a hold
-                is in force that promise is false, so the chip gives way to the hold notice. */}
+            {/* The countdown is a promise that the plan fires when it reaches zero. A held plan is
+                not going to fire, so its clock stops where the hold caught it: the chip shows that
+                time standing still, which is also the wait the plan gets back if it is resumed. */}
+            {plan.status === "active" && hold && (
+              <span className="pc-chip pc-chip-time pc-chip-paused" title={PAUSED_CHIP_TITLE}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 6.5v11M14.5 6.5v11" />
+                </svg>
+                Countdown stopped{" "}
+                {hold.cooldownRemainingSeconds != null && (
+                  <b>
+                    {hold.cooldownRemainingSeconds > 0
+                      ? `${formatCountdownLong(hold.cooldownRemainingSeconds)} left`
+                      : "was due"}
+                  </b>
+                )}
+              </span>
+            )}
+
             {plan.status === "active" && !hold && (
               <span
                 className={`pc-chip pc-chip-time ${
                   !isContractReady ? "" : "pc-chip-now"
                 }`}
+                title={
+                  plan.executionGate
+                    ? "Resumed — finishing the wait this plan had left when it was paused."
+                    : undefined
+                }
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />

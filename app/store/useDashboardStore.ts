@@ -22,6 +22,24 @@ export interface PlanAdminControl {
   status: "paused" | "cancelled";
   reason: string | null;
   updatedAt: string;
+  /**
+   * The plan's countdown as it stood when the hold was placed, in seconds — the wait it still owes.
+   * A hold stops the clock, so this is what the card shows in place of one, and what the plan gets
+   * back if an admin resumes it. null when the backend could not read the chain at the time.
+   */
+  cooldownRemainingSeconds: number | null;
+}
+
+/**
+ * The remainder of a paused countdown, being served now that the plan has been resumed.
+ *
+ * The contract has no idea a plan was ever paused — its cooldown carried on elapsing — so without
+ * this the first tick after a resume would execute the plan immediately, however long it had left.
+ */
+export interface PlanExecutionGate {
+  /** ISO instant the backend will execute from. */
+  notBefore: string;
+  remainingSeconds: number;
 }
 
 export interface DashboardPlanRecord {
@@ -38,15 +56,17 @@ export interface DashboardPlanRecord {
   nextRun: string;
   executionProgress: number;
   status: "active" | "cancelled" | "ended";
-  /** Contract timestamp when a manual execution becomes valid. */
+  /** Timestamp the next buy can actually happen at — the cooldown plus any paused-countdown wait. */
   contractDueTimestamp: number;
-  /** Contract due time displayed consistently by frontend and backend. */
+  /** Next-buy time displayed consistently by frontend and backend. */
   nextExecutionTimestamp: number;
   isReady: boolean;
   isEnrolledForAutoExecution: boolean;
   executionMode: "auto" | "manual" | null;
   /** Admin hold on auto-execution; null when nothing is holding the plan. */
   adminControl: PlanAdminControl | null;
+  /** Paused-countdown remainder still to run since the plan was resumed; null when free to run. */
+  executionGate: PlanExecutionGate | null;
 }
 
 interface DashboardHistoryPoint {
@@ -173,10 +193,13 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
               executedCount: number;
               active: boolean;
               dueTimestamp: number;
+              effectiveDueTimestamp?: number;
+              contractReady?: boolean;
               ready: boolean;
               isEnrolledForAutoExecution: boolean;
               executionMode: "auto" | "manual" | null;
               adminControl: PlanAdminControl | null;
+              executionGate?: PlanExecutionGate | null;
             }>;
           };
         })
@@ -328,7 +351,11 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
           const executedCount = Number(authoritativeSchedule.executedCount);
           const originalTotalNum = remainingNum + amountNum * executedCount;
           const totalSchedules = Math.max(1, Math.ceil(originalTotalNum / Math.max(amountNum, 0.000001)));
+          // The backend's effective due time already folds in a paused countdown a resumed plan is
+          // still serving, so the card counts to the moment the buy really happens rather than to
+          // the contract cooldown the pause outlived.
           const contractDueTimestamp =
+            backendTiming?.effectiveDueTimestamp ??
             backendTiming?.dueTimestamp ??
             Number(authoritativeSchedule.lastExecutionTime) + intervalSeconds;
           const isEnrolledForAutoExecution =
@@ -376,6 +403,8 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
             // rather than leaving a stale "contact the admin" on a finished plan.
             adminControl:
               status === "active" ? backendTiming?.adminControl ?? null : null,
+            executionGate:
+              status === "active" ? backendTiming?.executionGate ?? null : null,
           };
         })
         .filter((plan): plan is DashboardPlanRecord => plan !== null)
