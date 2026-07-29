@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseEventLogs } from "viem";
 import { DCA_VAULT_ABI } from "@/config/abis";
-import { getContracts } from "@/config/contracts";
+import { getDeployedVault } from "@/config/contracts";
 import { getServerPublicClient } from "@/lib/server-chain";
 import { isSupabaseConfigured, recordPlanCancelled, recordPlanCreated } from "@/lib/dca-plans-store";
 
@@ -36,12 +36,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const contracts = getContracts(chainId);
+    // Deployment, not the build's network list, is the question here: a plan the user just created
+    // has to be recorded whatever NETWORK_TYPE this build renders, or the dashboard never sees it.
+    const deployedVault = getDeployedVault(chainId);
     const client = getServerPublicClient(chainId);
-    if (!contracts || !client) {
+    if (!deployedVault || !client) {
       return NextResponse.json({ error: `Unsupported chainId ${chainId}`, ok: false }, { status: 400 });
     }
-    const vault = contracts.DCAVault.toLowerCase() as `0x${string}`;
+    const vault = deployedVault.toLowerCase() as `0x${string}`;
 
     const receipt = await client.getTransactionReceipt({ hash: txHash as `0x${string}` });
     if (receipt.status !== "success") {

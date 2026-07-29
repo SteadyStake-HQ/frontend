@@ -487,6 +487,20 @@ export interface ChainContracts {
 }
 
 /**
+ * The vault deployed on `chainId`, irrespective of whether this build offers that network.
+ *
+ * `getContracts` is gated on SUPPORTED_CHAIN_IDS, which NETWORK_TYPE filters — correct for the UI,
+ * wrong for anything that has to deal with a chain the user is already on. Recording a confirmed
+ * plan is the case that matters: gating it meant a `NETWORK_TYPE=mainnet` build refused to record
+ * plans on Ethereum Sepolia, and those plans then never appeared on the operator dashboard.
+ * Deployment is the only question worth asking there, so this answers just that.
+ */
+export function getDeployedVault(chainId: number): string | null {
+  const vault = BY_CHAIN[String(chainId)]?.DCAVault;
+  return vault && vault !== ZERO_ADDRESS ? vault : null;
+}
+
+/**
  * Get contract and token addresses for a given chain. Returns null if chain is not supported (see .env NEXT_PUBLIC_SUPPORTED_CHAIN_IDS).
  */
 export function getContracts(chainId: number): ChainContracts | null {
