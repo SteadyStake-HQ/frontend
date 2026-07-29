@@ -471,7 +471,13 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
     ],
     [chainsWithGasTank, allocation],
   );
-  const { totalBalanceUsdc6, byChain } = useGasTankAllChains();
+  /**
+   * `allByChain` for the per-network rows and the selector, `totalBalanceUsdc6` for the headline.
+   * They answer different questions: every tank holds the user's money and must be shown and
+   * topped up, but only the tanks of the connected network's kind can pay for a run on it, and the
+   * headline is what the plan screens spend against.
+   */
+  const { totalBalanceUsdc6, allByChain } = useGasTankAllChains();
   const refreshGasTank = useGasTankRefresh();
 
   const [selectedChainId, setSelectedChainId] = useState<number>(
@@ -548,7 +554,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
 
   /** Funded networks first — the ones with nothing in them are noise until they are picked. */
   const breakdown = chainsWithGasTank
-    .map((cid) => ({ chainId: cid, amount: byChain[cid] ?? 0n }))
+    .map((cid) => ({ chainId: cid, amount: allByChain[cid] ?? 0n }))
     .sort((a, b) => (b.amount > a.amount ? 1 : b.amount < a.amount ? -1 : 0));
   const maxShare = breakdown[0]?.amount ?? 0n;
 
@@ -876,7 +882,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                 selectedChainId={selectedChainId}
                 chainIds={selectableChains}
                 tankChainIds={chainsWithGasTank}
-                byChain={byChain}
+                byChain={allByChain}
                 onSelect={(cid) => {
                   setSelectedChainId(cid);
                   setError(null);

@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { useAccount, useReadContract, useWriteContract } from "wagmi";
+import { useAccount, useChainId, useReadContract, useWriteContract } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useContracts } from "@/app/hooks/useContracts";
 import { GAS_TANK_ABI, ERC20_ABI } from "@/config/abis";
 import { fromPooledUsd6, getContracts, getStableDecimals, toPooledUsd6 } from "@/config/contracts";
 import { SUPPORTED_CHAIN_IDS } from "@/config/chains-env";
+import { getNetworkType } from "@/config/network-registry";
 import { refreshGasTankBalances } from "@/lib/gas-tank-refresh";
 import { parseUnits } from "viem";
 
@@ -202,6 +203,12 @@ export function useGasCostPerExecutionForChain(chainId: number): bigint {
  * relayer debits, whoever set it.
  */
 
+/**
+ * Every chain this build reads a gas tank balance for. Fixed and in this order because each one is
+ * a hook call below, and hooks cannot be driven off a list that changes between renders.
+ */
+const TANK_CHAIN_IDS = [84532, 8453, 11155111, 56, 137, 2222, 677, 968];
+
 type ChainBalance = { balance: bigint; isLoading: boolean };
 
 /** Balance for one chain (for use in multi-chain aggregation). */
@@ -229,10 +236,22 @@ function useGasTankBalanceForChain(chainId: number): ChainBalance {
   return { balance: data ?? 0n, isLoading: enabled && isLoading };
 }
 
-/** Total gas tank balance across all networks (CEX-style: one balance, use on any chain). */
-export function useGasTankAllChains(): {
+/**
+ * Total gas tank balance across the networks that can pay for a run on `forChainId` (CEX-style:
+ * one balance, use on any of them), defaulting to the connected chain.
+ *
+ * Only networks of the same kind are pooled, mainnet with mainnet and testnet with testnet, because
+ * that is the rule the relayer now settles by (backend/src/run-executor.ts). Summing them together
+ * would quote a balance that includes faucet MockUSDC the relayer will never spend on a mainnet run
+ * — a tank that reads as funded and then does not pay. `allByChain` is every tank regardless, for
+ * the top-up screen, where "where is my money" is a different question from "what can this run
+ * spend".
+ */
+export function useGasTankAllChains(forChainId?: number): {
   totalBalanceUsdc6: bigint;
   byChain: Record<number, bigint>;
+  allByChain: Record<number, bigint>;
+  eligibleChainIds: number[];
   isLoading: boolean;
   refetch: () => Promise<void>;
 } {
@@ -245,8 +264,10 @@ export function useGasTankAllChains(): {
   const b677 = useGasTankBalanceForChain(677);
   const b968 = useGasTankBalanceForChain(968);
   const refetch = useGasTankRefresh();
+  const connectedChainId = useChainId();
+  const poolChainId = forChainId ?? connectedChainId;
 
-  const byChain: Record<number, bigint> = useMemo(
+  const allByChain: Record<number, bigint> = useMemo(
     () => ({
       84532: b84532.balance,
       8453: b8453.balance,
@@ -269,8 +290,6 @@ export function useGasTankAllChains(): {
     ]
   );
 
-  // Normalised to the pooled 6-decimal scale before summing: each balance is in its own chain's
-  // stablecoin base units, and BSC's are 18-decimal, so a raw sum would overstate the pool by 10^12.
   const all = [
     { c: b84532, id: 84532 },
     { c: b8453, id: 8453 },
@@ -281,11 +300,36 @@ export function useGasTankAllChains(): {
     { c: b677, id: 677 },
     { c: b968, id: 968 },
   ];
-  const totalBalanceUsdc6 = all.reduce((sum, e) => sum + toPooledUsd6(e.c.balance, e.id), 0n);
+
+  /**
+   * The tanks that can pay for a run on `poolChainId`. Mirrors eligibleDeductChainIds in
+   * backend/src/run-executor.ts, including its treatment of a chain the table does not classify:
+   * such a chain can only pay for itself.
+   */
+  const eligibleChainIds = useMemo(() => {
+    const poolType = getNetworkType(poolChainId);
+    if (!poolType) return [poolChainId];
+    return TANK_CHAIN_IDS.filter((id) => id === poolChainId || getNetworkType(id) === poolType);
+  }, [poolChainId]);
+
+  const byChain: Record<number, bigint> = useMemo(() => {
+    const out: Record<number, bigint> = {};
+    for (const id of eligibleChainIds) out[id] = allByChain[id] ?? 0n;
+    return out;
+  }, [eligibleChainIds, allByChain]);
+
+  // Normalised to the pooled 6-decimal scale before summing: each balance is in its own chain's
+  // stablecoin base units, and BSC's are 18-decimal, so a raw sum would overstate the pool by 10^12.
+  const totalBalanceUsdc6 = Object.entries(byChain).reduce(
+    (sum, [id, balance]) => sum + toPooledUsd6(balance, Number(id)),
+    0n,
+  );
 
   return {
     totalBalanceUsdc6,
     byChain,
+    allByChain,
+    eligibleChainIds,
     isLoading: all.some((e) => e.c.isLoading),
     refetch,
   };
