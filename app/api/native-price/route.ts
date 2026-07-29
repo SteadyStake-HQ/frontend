@@ -19,7 +19,9 @@ const COINGECKO_IDS: Record<number, string> = {
   84532: "ethereum",
   11155111: "ethereum",
   56: "binancecoin",
-  137: "matic-network",
+  // POL, not MATIC: CoinGecko retired "matic-network" after the token migration and it now
+  // returns an empty object, which read as a 0 price for every Polygon run-cost estimate.
+  137: "polygon-ecosystem-token",
   2222: "kava",
   // BOT Chain mainnet. CoinGecko's "bot" is the fallback leg of the mainnet BOT fetch below;
   // the BOT Chain DEX pool price is tried first. (Testnet 968 is pinned — see STATIC_PRICE_USD.)

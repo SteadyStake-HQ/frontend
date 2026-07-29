@@ -64,8 +64,10 @@ const BNB_MAINNET_TOKENS = {
 };
 
 // Kava EVM mainnet (2222)
+// Kava has no live USDC: the Multichain bridge that issued 0xfA9343C3...A40f shut down in 2023 and
+// left that token stranded, so native Tether USDt (6 decimals) is the vault's settlement stablecoin.
 const KAVA_MAINNET_TOKENS = {
-  USDC: "0xfA9343C3897324496A05fC75abeD6bAC29f8A40f" as const,
+  USDT: "0x919C1c267BC06a7039e03fcc2eF738525769109c" as const,
   WKAVA: "0xc86c7C0eFbd6A49B35E8714C5f59D99De09A225b" as const,
 };
 
@@ -194,11 +196,11 @@ const BNB_MAINNET_TOKEN_LIST: TokenListEntry[] = [
 
 const KAVA_MAINNET_TOKEN_LIST: TokenListEntry[] = [
   {
-    name: "USD Coin",
-    symbol: "USDC",
-    address: KAVA_MAINNET_TOKENS.USDC,
+    name: "Tether USD",
+    symbol: "USDT",
+    address: KAVA_MAINNET_TOKENS.USDT,
     decimals: 6,
-    logo: getTokenLogoUrl(2222, KAVA_MAINNET_TOKENS.USDC),
+    logo: getTokenLogoUrl(2222, KAVA_MAINNET_TOKENS.USDT),
   },
   {
     name: "Wrapped KAVA",
@@ -407,6 +409,7 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 const STABLE_SYMBOL_BY_CHAIN: Record<number, string> = {
   677: "USDT",
   968: "USDT",
+  2222: "USDT", // Kava: native Tether USDt — its USDC came from the defunct Multichain bridge
 };
 
 /**
@@ -509,7 +512,7 @@ export function getContracts(chainId: number): ChainContracts | null {
       chainId: 2222,
       DCAVault: addrs.DCAVault,
       DCAResolver: addrs.DCAResolver,
-      MockUSDC: KAVA_MAINNET_TOKENS.USDC,
+      MockUSDC: KAVA_MAINNET_TOKENS.USDT,
       MockSwapRouter: ZERO_ADDRESS,
       MockAERO: KAVA_MAINNET_TOKENS.WKAVA,
       MockDEGEN: ZERO_ADDRESS,

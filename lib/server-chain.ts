@@ -13,7 +13,9 @@ const CHAIN_RPC: Record<number, string> = {
   // rpc.sepolia.org frequently times out (522); PublicNode is the reliable default.
   11155111: process.env.RPC_URL_11155111 ?? "https://ethereum-sepolia-rpc.publicnode.com",
   56: process.env.RPC_URL_56 ?? "https://bsc-dataseed.binance.org",
-  137: process.env.RPC_URL_137 ?? "https://polygon-rpc.com",
+  // Not polygon-rpc.com: that endpoint now answers 401 "API key disabled, tenant disabled"
+  // for unauthenticated callers, which made every Polygon RPC call fail out of the box.
+  137: process.env.RPC_URL_137 ?? "https://polygon-bor-rpc.publicnode.com",
   2222: process.env.RPC_URL_2222 ?? "https://evm.kava.io",
   // BOT Chain: eth_getLogs is disabled on the public mainnet endpoint.
   677: process.env.RPC_URL_677 ?? "https://rpc.botchain.ai",

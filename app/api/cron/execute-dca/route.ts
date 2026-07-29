@@ -39,7 +39,7 @@ const CHAIN_RPC: Record<number, string> = {
   84532: process.env.RPC_URL_84532 ?? "https://sepolia.base.org",
   11155111: process.env.RPC_URL_11155111 ?? "https://ethereum-sepolia-rpc.publicnode.com",
   56: process.env.RPC_URL_56 ?? "https://bsc-dataseed.binance.org",
-  137: process.env.RPC_URL_137 ?? "https://polygon-rpc.com",
+  137: process.env.RPC_URL_137 ?? "https://polygon-bor-rpc.publicnode.com", // polygon-rpc.com now 401s
   2222: process.env.RPC_URL_2222 ?? "https://evm.kava.io",
   677: process.env.RPC_URL_677 ?? "https://rpc.botchain.ai",
   968: process.env.RPC_URL_968 ?? "https://rpc.bohr.life",

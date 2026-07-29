@@ -7,7 +7,7 @@ const RPC_BY_CHAIN: Record<number, string> = {
   84532: "https://sepolia.base.org",
   8453: "https://mainnet.base.org",
   56: "https://bsc-dataseed.binance.org",
-  137: "https://polygon-rpc.com",
+  137: "https://polygon-bor-rpc.publicnode.com", // polygon-rpc.com now 401s for unauthenticated callers
   2222: "https://evm.kava.io",
   677: "https://rpc.botchain.ai",
   968: "https://rpc.bohr.life",
