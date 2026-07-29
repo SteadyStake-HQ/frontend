@@ -13,6 +13,7 @@ import { decodeEventLog } from "viem";
 import { FREQUENCY_OPTIONS, type FrequencyOptionId } from "@/config/frequencies-env";
 import { getTokenLogoUrl } from "@/lib/token-logo";
 import { formatUnits, getAddress, isAddress, parseUnits } from "viem";
+import { POOLED_DECIMALS, getStableDecimals, toPooledUsd6 } from "@/config/contracts";
 import { getBumpedGasOptions } from "@/lib/get-bumped-gas";
 import { parseTxError } from "@/lib/parse-tx-error";
 
@@ -504,9 +505,17 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
 
   const runCountNum = runCount.trim() === "" ? 0 : Math.max(0, Math.floor(parseFloat(runCount) || 0));
   const totalRuns = runCountNum;
+  /** Decimals of this chain's settlement stablecoin: 18 on BNB Chain, 6 everywhere else. */
+  const stableDecimals = getStableDecimals(chainId);
+  /**
+   * Kept at 6 decimal places of *text* precision on every chain, then parsed at the chain's own
+   * scale. This must produce exactly the same bigint as `totalAmountBig` in the submit handler —
+   * the two are the allowance and the transfer, and any dust between them reverts the create.
+   * Formatting to 18 places instead would surface float artifacts (0.1*3 -> 0.300000000000000044).
+   */
   const planTotalUsdc6 =
     amountPerInterval && runCountNum >= 1
-      ? parseUnits((parseFloat(amountPerInterval) * runCountNum).toFixed(6), 6)
+      ? parseUnits((parseFloat(amountPerInterval) * runCountNum).toFixed(6), stableDecimals)
       : 0n;
   /**
    * What one run will charge on this network — the operator's flat rate where one is set, the
@@ -515,8 +524,13 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
    */
   const { usdc6: costPerRunUsdc6 } = useEffectiveRunPriceUsdc6(chainId);
   const requiredGasForPlan = totalRuns > 0 && chainId ? costPerRunUsdc6 * BigInt(totalRuns) : 0n;
-  /** The tank already holds enough — across all networks — to run this plan end to end. */
-  const tankCoversPlan = requiredGasForPlan > 0n && gasTankBalance >= requiredGasForPlan;
+  /**
+   * The tank already holds enough — across all networks — to run this plan end to end.
+   * `gasTankBalance` is the pooled 6-decimal total while `requiredGasForPlan` is in this chain's
+   * base units, so the requirement is converted before the comparison.
+   */
+  const tankCoversPlan =
+    requiredGasForPlan > 0n && gasTankBalance >= toPooledUsd6(requiredGasForPlan, chainId);
   const effectiveGasSource: "tank" | "deposit" = gasFundingSource ?? (tankCoversPlan ? "tank" : "deposit");
   /**
    * Gas is pulled from the wallet at create time only when the user is funding this plan fresh.
@@ -537,12 +551,13 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
       (vaultGasTankAddress &&
         String(vaultGasTankAddress).toLowerCase() !== ZERO_ADDR.toLowerCase()))
   );
-  const gasTankBalanceFormatted = Number(formatUnits(gasTankBalance, 6));
+  const gasTankBalanceFormatted = Number(formatUnits(gasTankBalance, POOLED_DECIMALS));
   // Per-network gas tank balances, funded networks first, for the expandable breakdown.
   const gasTankBreakdown = Object.entries(gasTankByChain)
     .map(([cid, raw]) => {
       const id = Number(cid);
-      const amount = Number(formatUnits(raw, 6));
+      // Each entry is still in its own chain's base units, unlike the pooled total above.
+      const amount = Number(formatUnits(raw, getStableDecimals(id)));
       return { chainId: id, name: CHAIN_NAMES[id] ?? `Chain ${id}`, amount };
     })
     .filter((c) => c.amount > 0)
@@ -556,8 +571,9 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
     isLow: tankIsLow,
   } = useGasTankLevel(gasTankBalance, chainId);
   const tankTone: "ok" | "low" | "empty" = tankIsEmpty ? "empty" : tankIsLow ? "low" : "ok";
-  const requiredGasFormatted = requiredGasForPlan > 0n ? Number(formatUnits(requiredGasForPlan, 6)) : 0;
-  const costPerRunUsd = Number(formatUnits(costPerRunUsdc6, 6));
+  const requiredGasFormatted =
+    requiredGasForPlan > 0n ? Number(formatUnits(requiredGasForPlan, stableDecimals)) : 0;
+  const costPerRunUsd = Number(formatUnits(costPerRunUsdc6, stableDecimals));
 
   /**
    * Which network's tank the relayer will actually charge for the first run. Mirrors
@@ -567,13 +583,18 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
    */
   const gasPayingChainId: number | null = (() => {
     if (costPerRunUsdc6 <= 0n) return null;
-    if (chainId && (gasTankByChain[chainId] ?? 0n) >= costPerRunUsdc6) return chainId;
+    // Balances live in each chain's own base units, so both the requirement and every candidate
+    // balance are lifted to the pooled scale first — otherwise a BSC tank's 18-decimal number
+    // dwarfs every other chain's and always wins the "richest tank" comparison.
+    const costPooled = toPooledUsd6(costPerRunUsdc6, chainId);
+    if (chainId && toPooledUsd6(gasTankByChain[chainId] ?? 0n, chainId) >= costPooled) return chainId;
     let best: number | null = null;
     let bestBal = 0n;
     for (const [cid, bal] of Object.entries(gasTankByChain)) {
-      if (bal >= costPerRunUsdc6 && bal > bestBal) {
+      const balPooled = toPooledUsd6(bal, Number(cid));
+      if (balPooled >= costPooled && balPooled > bestBal) {
         best = Number(cid);
-        bestBal = bal;
+        bestBal = balPooled;
       }
     }
     return best;
@@ -660,7 +681,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
         setStage("enrolling");
         try {
           if (requiredGasForPlanRef.current > 0n) {
-            await depositToGasTank(formatUnits(requiredGasForPlanRef.current, 6));
+            await depositToGasTank(formatUnits(requiredGasForPlanRef.current, stableDecimals));
           }
           const count = enrolledCount;
           if (count === 0) {
@@ -668,7 +689,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
           } else {
             const fee = additionalAutoPlanFeeUsdc6 ?? 0n;
             if (fee > 0n) {
-              const feeStr = formatUnits(fee, 6);
+              const feeStr = formatUnits(fee, stableDecimals);
               await approve(feeStr, contracts.DCAVault);
             }
             await enrollForAutoExecution(scheduleId);
@@ -766,7 +787,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
     }
 
     const totalAmount = (parseFloat(amountPerInterval) * runCountNum).toFixed(6);
-    const totalAmountBig = parseUnits(totalAmount, 6);
+    const totalAmountBig = parseUnits(totalAmount, stableDecimals);
     // Only pull gas from the wallet when the user chose to fund fresh ("deposit"). Picking
     // "Existing balance" (effectiveGasSource === "tank") must leave the tank alone — the relayer
     // deducts per run. This mirrors `gasAddedAtCreate`, which drives the receipt; keeping the two
@@ -812,7 +833,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
       setIsSubmitting(true);
       setStage("approving");
       try {
-        await approve(formatUnits(approvalAmount, 6), contracts.DCAVault);
+        await approve(formatUnits(approvalAmount, stableDecimals), contracts.DCAVault);
       } catch (err) {
         setError(parseTxError(err, "Approval failed"));
         setIsSubmitting(false);
@@ -826,7 +847,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
       setIsSubmitting(true);
       setStage("approving");
       try {
-        await approve(formatUnits(gasNeededAtCreate, 6), contracts.GasTank);
+        await approve(formatUnits(gasNeededAtCreate, stableDecimals), contracts.GasTank);
       } catch (err) {
         setError(parseTxError(err, "Approval failed"));
         setIsSubmitting(false);
@@ -855,7 +876,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
             frequency as 0 | 1 | 2 | 3 | 4,
             amountPerInterval,
             totalAmount,
-            formatUnits(gasNeededAtCreate, 6),
+            formatUnits(gasNeededAtCreate, stableDecimals),
             gasOverrides
           );
         try {

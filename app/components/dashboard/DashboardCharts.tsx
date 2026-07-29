@@ -11,7 +11,9 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useDashboardStats } from "./DashboardStatsContext";
-import { useStableSymbol } from "@/app/hooks";
+import { useContracts, useStableSymbol } from "@/app/hooks";
+import { getStableDecimals } from "@/config/contracts";
+import { formatUnits } from "viem";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
 import { LoadingCard } from "../LoadingComponents";
 
@@ -58,6 +60,7 @@ export function DashboardCharts({ onAddPlan }: { onAddPlan?: () => void }) {
     activePlanCount,
   } = useDashboardStats();
   const stable = useStableSymbol();
+  const { chainId } = useContracts();
   const historyPoints = useDashboardStore((state) => state.historyPoints);
   const isLoading = useDashboardStore((state) => state.isLoading);
 
@@ -92,10 +95,11 @@ export function DashboardCharts({ onAddPlan }: { onAddPlan?: () => void }) {
         year:
           i === 0 || i === sorted.length - 1 ? "2-digit" : undefined,
       }),
-      value: Number(p.valueUsdc6) / 1e6,
+      // Snapshots are recorded in the chain's own stablecoin base units, which is 1e18 on BSC.
+      value: Number(formatUnits(BigInt(p.valueUsdc6), getStableDecimals(chainId))),
       added: null as number | null,
     }));
-  }, [historyPoints]);
+  }, [historyPoints, chainId]);
 
   const usePlanData = hasPlans && dataFromPlans.length > 0;
   const data = usePlanData ? dataFromPlans : dataFromHistory;

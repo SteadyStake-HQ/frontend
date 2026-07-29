@@ -6,6 +6,7 @@ import { useChainId, usePublicClient } from "wagmi";
 import { useDCAVault, useDCASchedule, useContracts, useStableSymbol } from "@/app/hooks";
 import { calculateEarlyFee, shouldChargeEarlyFee } from "@/lib/constants";
 import { formatUnits } from "viem";
+import { getStableDecimals } from "@/config/contracts";
 import { parseTxError } from "@/lib/parse-tx-error";
 
 interface CancelScheduleButtonProps {
@@ -112,13 +113,13 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
               </p>
               <div className="space-y-1 text-sm">
                 <p className="text-[var(--foreground)]">
-                  Remaining: {formatUnits(remainingAmount, 6)} {stable}
+                  Remaining: {formatUnits(remainingAmount, getStableDecimals(chainId))} {stable}
                 </p>
                 <p className="text-red-400 font-medium">
-                  Fee (3%): {formatUnits(earlyFee, 6)} {stable}
+                  Fee (3%): {formatUnits(earlyFee, getStableDecimals(chainId))} {stable}
                 </p>
                 <p className="text-green-400 font-medium">
-                  {"You'll"} receive: {formatUnits(netReturn, 6)} {stable}
+                  {"You'll"} receive: {formatUnits(netReturn, getStableDecimals(chainId))} {stable}
                 </p>
               </div>
             </div>
@@ -130,7 +131,7 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
                 No early cancellation fee (over 50% already executed)
               </p>
               <p className="text-sm text-[var(--foreground)] mt-1">
-                {"You'll"} receive: {formatUnits(remainingAmount, 6)} {stable}
+                {"You'll"} receive: {formatUnits(remainingAmount, getStableDecimals(chainId))} {stable}
               </p>
             </div>
           )}

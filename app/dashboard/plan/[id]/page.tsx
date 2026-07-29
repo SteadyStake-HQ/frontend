@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useAccount, useConfig } from "wagmi";
 import { formatUnits } from "viem";
+import { getStableDecimals } from "@/config/contracts";
 import { useDCASchedule, useContracts, useStableSymbol, usePlanExecutions, type PlanExecution } from "@/app/hooks";
 import { DCA_FREQUENCY_INTERVALS } from "@/app/hooks/useDCAHelpers";
 import { Header } from "@/app/components/Header";
@@ -360,12 +361,12 @@ export default function PlanPage() {
 
     const frequencyNum = Number(schedule.frequency);
     const intervalSeconds = DCA_FREQUENCY_INTERVALS[frequencyNum] ?? 86400;
-    const amountPerRun = Number(formatUnits(schedule.amountPerInterval, 6));
+    const amountPerRun = Number(formatUnits(schedule.amountPerInterval, getStableDecimals(chainId)));
     const executedCount = Number(schedule.executedCount);
 
     // The contract stores what's left, not what was put in: reconstruct the
     // original deposit so "how far along am I" has a denominator.
-    const remaining = Number(formatUnits(schedule.totalAmount, 6));
+    const remaining = Number(formatUnits(schedule.totalAmount, getStableDecimals(chainId)));
     const invested = amountPerRun * executedCount;
     const totalDeposited = remaining + invested;
     const runsCount = amountPerRun > 0 ? Math.ceil(totalDeposited / amountPerRun) || 1 : 1;
@@ -833,6 +834,7 @@ function PlanHistory({
   now: number;
 }) {
   const stable = useStableSymbol();
+  const { chainId } = useContracts();
   if (plan.executedCount === 0 && plan.status !== "active") {
     return (
       <div className="pl-empty">
@@ -911,7 +913,7 @@ function PlanHistory({
                 Buy #{row.index}
                 <span>·</span>
                 {usd(
-                  row.usdcAmount != null ? Number(formatUnits(row.usdcAmount, 6)) : plan.amountPerRun,
+                  row.usdcAmount != null ? Number(formatUnits(row.usdcAmount, getStableDecimals(chainId))) : plan.amountPerRun,
                 )}{" "}
                 {stable}
                 {row.tokenOut != null && row.tokenOut > 0n && (

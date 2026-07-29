@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { formatUnits } from "viem";
+import { POOLED_DECIMALS, getStableDecimals } from "@/config/contracts";
 
 /**
  * Shared gas tank furniture: the number, and the thing that shows how full the tank is.
@@ -38,8 +39,18 @@ export function formatGasAmount(n: number): string {
   });
 }
 
+/**
+ * Format an amount already on the pooled 6-decimal scale — cross-chain totals, which
+ * `useGasTankAllChains` normalises before summing. For a balance still in one chain's own base
+ * units use {@link gasAmountForChain} instead; on BNB Chain the two scales differ by 10^12.
+ */
 export function gasAmountFromUsdc6(raw: bigint): string {
-  return formatGasAmount(Number(formatUnits(raw, 6)));
+  return formatGasAmount(Number(formatUnits(raw, POOLED_DECIMALS)));
+}
+
+/** Format an amount in one chain's native settlement-token base units. */
+export function gasAmountForChain(raw: bigint, chainId: number): string {
+  return formatGasAmount(Number(formatUnits(raw, getStableDecimals(chainId))));
 }
 
 /**
@@ -108,7 +119,10 @@ export function useCountUp(value: number, durationMs = 900): number {
   return display;
 }
 
-/** The balance, counting to its new value, in the caller's own type scale. */
+/**
+ * The pooled balance, counting to its new value. Both call sites pass the cross-chain total from
+ * `useGasTankAllChains`, which is already normalised to {@link POOLED_DECIMALS}.
+ */
 export function AnimatedGasAmount({
   valueUsdc6,
   className,
@@ -116,7 +130,7 @@ export function AnimatedGasAmount({
   valueUsdc6: bigint;
   className?: string;
 }) {
-  const target = Number(formatUnits(valueUsdc6, 6));
+  const target = Number(formatUnits(valueUsdc6, POOLED_DECIMALS));
   const display = useCountUp(target);
   // Snap to the exact figure once settled: an eased float must never round away a real cent.
   const shown = Math.abs(display - target) < 0.00005 ? target : display;

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { formatUnits } from "viem";
+import { getStableDecimals } from "@/config/contracts";
 
 const SCHEDULER_API_URL =
   process.env.SCHEDULER_API_URL ??
@@ -51,7 +53,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       chainId,
       usdc6,
-      usd: typeof data.manual?.usd === "number" ? data.manual.usd : Number(usdc6) / 1e6,
+      // `usdc6` is in the chain's stablecoin base units, so the local fallback divides by that
+      // chain's scale rather than a fixed 1e6.
+      usd:
+        typeof data.manual?.usd === "number"
+          ? data.manual.usd
+          : Number(formatUnits(BigInt(usdc6), getStableDecimals(chainId))),
       source: "manual" as const,
     });
   } catch {

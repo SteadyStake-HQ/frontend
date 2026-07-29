@@ -4,6 +4,7 @@ import { useCallback, useMemo } from "react";
 import { useAccount, useWriteContract, useReadContract } from "wagmi";
 import { useContracts } from "@/app/hooks/useContracts";
 import { DCA_VAULT_ABI, ERC20_ABI } from "@/config/abis";
+import { getStableDecimals } from "@/config/contracts";
 import { parseUnits } from "viem";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
@@ -12,13 +13,16 @@ export const useDCAVault = () => {
   const { address } = useAccount();
   const { chainId, contracts, isSupported } = useContracts();
   const { writeContract, isPending } = useWriteContract();
+  // Every amount below is denominated in the chain's settlement stablecoin, which is 18-decimal
+  // on BNB Chain and 6-decimal elsewhere.
+  const stableDecimals = getStableDecimals(chainId);
 
   const createSchedule = useCallback(
     async (
       targetToken: string,
       frequency: 0 | 1 | 2 | 3 | 4, // ONEMIN | DAILY | WEEKLY | BIWEEKLY | MONTHLY
-      amountPerInterval: string, // in USDC (6 decimals)
-      totalAmount: string, // in USDC (6 decimals)
+      amountPerInterval: string, // in settlement-stablecoin units (see getStableDecimals)
+      totalAmount: string, // in settlement-stablecoin units (see getStableDecimals)
       gasOverrides?: { maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint }
     ) => {
       if (!address) throw new Error("Wallet not connected");
@@ -33,8 +37,8 @@ export const useDCAVault = () => {
             args: [
               targetToken as `0x${string}`,
               frequency,
-              parseUnits(amountPerInterval, 6),
-              parseUnits(totalAmount, 6),
+              parseUnits(amountPerInterval, stableDecimals),
+              parseUnits(totalAmount, stableDecimals),
             ],
             chainId,
             ...(gasOverrides?.maxFeePerGas != null && { maxFeePerGas: gasOverrides.maxFeePerGas }),
@@ -49,7 +53,7 @@ export const useDCAVault = () => {
         );
       });
     },
-    [address, isSupported, writeContract, chainId, contracts],
+    [address, isSupported, writeContract, chainId, contracts, stableDecimals],
   );
 
   /** Create schedule + enroll for auto-exec + fund gas tank in one tx. Use when enrolledCount === 0 and gasTank is set on vault. One approval (vault for totalAmount + gasAmountForTank). */
@@ -59,7 +63,7 @@ export const useDCAVault = () => {
       frequency: 0 | 1 | 2 | 3 | 4,
       amountPerInterval: string,
       totalAmount: string,
-      gasAmountForTank: string, // USDC 6 decimals (can be "0")
+      gasAmountForTank: string, // settlement-stablecoin units (can be "0")
       gasOverrides?: { maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint }
     ): Promise<`0x${string}`> => {
       if (!address) throw new Error("Wallet not connected");
@@ -74,9 +78,9 @@ export const useDCAVault = () => {
             args: [
               targetToken as `0x${string}`,
               frequency,
-              parseUnits(amountPerInterval, 6),
-              parseUnits(totalAmount, 6),
-              parseUnits(gasAmountForTank, 6),
+              parseUnits(amountPerInterval, stableDecimals),
+              parseUnits(totalAmount, stableDecimals),
+              parseUnits(gasAmountForTank, stableDecimals),
             ],
             chainId,
             ...(gasOverrides?.maxFeePerGas != null && { maxFeePerGas: gasOverrides.maxFeePerGas }),
@@ -91,7 +95,7 @@ export const useDCAVault = () => {
         );
       });
     },
-    [address, isSupported, writeContract, chainId, contracts],
+    [address, isSupported, writeContract, chainId, contracts, stableDecimals],
   );
 
   const cancelSchedule = useCallback(
@@ -296,6 +300,9 @@ export const useTokenApproval = (tokenAddress: string) => {
   const { address } = useAccount();
   const { chainId, isSupported } = useContracts();
   const { writeContract, isPending } = useWriteContract();
+  // Only ever instantiated with the settlement stablecoin (contracts.MockUSDC), so `amount` is
+  // parsed at that token's scale — 18 decimals on BNB Chain, 6 elsewhere.
+  const stableDecimals = getStableDecimals(chainId);
 
   const approve = useCallback(
     async (amount: string, spender: string): Promise<`0x${string}` | void> => {
@@ -308,7 +315,7 @@ export const useTokenApproval = (tokenAddress: string) => {
             address: tokenAddress as `0x${string}`,
             abi: ERC20_ABI,
             functionName: "approve",
-            args: [spender as `0x${string}`, parseUnits(amount, 6)],
+            args: [spender as `0x${string}`, parseUnits(amount, stableDecimals)],
             chainId,
           },
           {
@@ -318,7 +325,7 @@ export const useTokenApproval = (tokenAddress: string) => {
         );
       });
     },
-    [address, isSupported, tokenAddress, writeContract, chainId],
+    [address, isSupported, tokenAddress, writeContract, chainId, stableDecimals],
   );
 
   return { approve, isLoading: isPending };

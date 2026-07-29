@@ -423,6 +423,56 @@ export function getStableSymbol(chainId: number): string {
   return STABLE_SYMBOL_BY_CHAIN[chainId] ?? "USDC";
 }
 
+/**
+ * Decimals of the settlement stablecoin the vault holds on a chain.
+ *
+ * Every amount that crosses the contract boundary — plan deposits, approvals, GasTank balances —
+ * is in this token's base units, so parseUnits/formatUnits must use this and never a literal 6.
+ * It is 6 everywhere except BNB Chain: BSC has no liquid 6-decimal stablecoin (Binance-Peg
+ * USDC/USDT, BUSD, FDUSD, USD1 and DAI are all 18-decimal, and the 6-decimal bridged wrappers hold
+ * only a few hundred thousand dollars), so chain 56 settles in 18-decimal Binance-Peg USDC.
+ *
+ * Mirrors `getStableDecimals()` in backend/src/config.ts — keep the two in step.
+ */
+const STABLE_DECIMALS_BY_CHAIN: Record<number, number> = {
+  56: 18, // Binance-Peg USD Coin
+};
+
+export function getStableDecimals(chainId: number): number {
+  // Mock-stack chains deploy MockUSDC, which is 6-decimal like the real token.
+  const mock = BY_CHAIN[String(chainId)]?.MockUSDC;
+  if (mock && mock !== ZERO_ADDRESS) return 6;
+  return STABLE_DECIMALS_BY_CHAIN[chainId] ?? 6;
+}
+
+/**
+ * Scale used for any figure that spans chains — above all the pooled gas-tank balance the header
+ * shows. Fixed at 6 decimals because that is what every consumer of those totals already assumes.
+ *
+ * A cross-chain sum has to be normalised before it is added up: balances live in each chain's own
+ * base units, so adding BSC's 18-decimal raw balance straight into the pool inflates the total by
+ * 10^12 and reads as a tank with a trillion dollars in it.
+ */
+export const POOLED_DECIMALS = 6;
+
+/** Native settlement-token base units -> the canonical pooled (6-decimal) scale. */
+export function toPooledUsd6(amount: bigint, chainId: number): bigint {
+  const decimals = getStableDecimals(chainId);
+  if (decimals === POOLED_DECIMALS) return amount;
+  return decimals > POOLED_DECIMALS
+    ? amount / 10n ** BigInt(decimals - POOLED_DECIMALS)
+    : amount * 10n ** BigInt(POOLED_DECIMALS - decimals);
+}
+
+/** The canonical pooled (6-decimal) scale -> a chain's native settlement-token base units. */
+export function fromPooledUsd6(amount: bigint, chainId: number): bigint {
+  const decimals = getStableDecimals(chainId);
+  if (decimals === POOLED_DECIMALS) return amount;
+  return decimals > POOLED_DECIMALS
+    ? amount * 10n ** BigInt(decimals - POOLED_DECIMALS)
+    : amount / 10n ** BigInt(POOLED_DECIMALS - decimals);
+}
+
 export interface ChainContracts {
   chainId: number;
   DCAVault: string;

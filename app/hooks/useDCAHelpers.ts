@@ -1,6 +1,7 @@
 "use client";
 
 import { formatUnits } from "viem";
+import { getStableDecimals } from "@/config/contracts";
 
 export const DCA_FREQUENCY_LABELS: Record<number, string> = {
   0: "1 Minute (Test)",
@@ -56,8 +57,13 @@ export const calculateCancelFee = (remainingAmount: bigint): bigint => {
   return BigInt(0);
 };
 
-export const formatUSDC = (amount: bigint): string => {
-  return formatUnits(amount, 6);
+/**
+ * Format a settlement-stablecoin amount for display. `chainId` is required because the token is
+ * 18-decimal on BNB Chain and 6-decimal everywhere else — a fixed 6 here would misread BSC
+ * balances by a factor of 10^12.
+ */
+export const formatUSDC = (amount: bigint, chainId: number): string => {
+  return formatUnits(amount, getStableDecimals(chainId));
 };
 
 export const calculateExecutionProgress = (

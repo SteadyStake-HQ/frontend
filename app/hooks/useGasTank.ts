@@ -5,7 +5,7 @@ import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useContracts } from "@/app/hooks/useContracts";
 import { GAS_TANK_ABI, ERC20_ABI } from "@/config/abis";
-import { getContracts } from "@/config/contracts";
+import { fromPooledUsd6, getContracts, getStableDecimals, toPooledUsd6 } from "@/config/contracts";
 import { SUPPORTED_CHAIN_IDS } from "@/config/chains-env";
 import { refreshGasTankBalances } from "@/lib/gas-tank-refresh";
 import { parseUnits } from "viem";
@@ -70,7 +70,7 @@ export function useGasTank() {
   const deposit = useCallback(
     async (amountUsdc: string) => {
       if (!address || !hasGasTank) throw new Error("Wallet not connected or GasTank not deployed");
-      const amount = parseUnits(amountUsdc, 6);
+      const amount = parseUnits(amountUsdc, getStableDecimals(chainId));
       return new Promise<void>((resolve, reject) => {
         writeDeposit(
           {
@@ -97,7 +97,7 @@ export function useGasTank() {
   const withdraw = useCallback(
     async (amountUsdc: string) => {
       if (!address || !hasGasTank) throw new Error("Wallet not connected or GasTank not deployed");
-      const amount = parseUnits(amountUsdc, 6);
+      const amount = parseUnits(amountUsdc, getStableDecimals(chainId));
       return new Promise<void>((resolve, reject) => {
         writeWithdraw(
           {
@@ -165,8 +165,15 @@ export function useEffectiveRunPriceUsdc6(chainId: number | undefined): {
   if (contractUsdc6 > 0n) {
     return { usdc6: contractUsdc6, source: "contract" };
   }
+  // The config default is a USD figure; scale it by the chain's own stablecoin decimals so the
+  // fallback is comparable with the operator and contract prices above, which are already native.
+  const configUsd = getGasCostPerRunUsd(chainId ?? 0);
+  const configUsdc6 =
+    (BigInt(Math.max(1, Math.ceil(configUsd * 1_000_000))) *
+      10n ** BigInt(getStableDecimals(chainId ?? 0))) /
+    1_000_000n;
   return {
-    usdc6: BigInt(Math.max(1, Math.ceil(getGasCostPerRunUsd(chainId ?? 0) * 1_000_000))),
+    usdc6: configUsdc6 > 0n ? configUsdc6 : 1n,
     source: "config",
   };
 }
@@ -262,13 +269,24 @@ export function useGasTankAllChains(): {
     ]
   );
 
-  const all = [b84532, b8453, b11155111, b56, b137, b2222, b677, b968];
-  const totalBalanceUsdc6 = all.reduce((sum, c) => sum + c.balance, 0n);
+  // Normalised to the pooled 6-decimal scale before summing: each balance is in its own chain's
+  // stablecoin base units, and BSC's are 18-decimal, so a raw sum would overstate the pool by 10^12.
+  const all = [
+    { c: b84532, id: 84532 },
+    { c: b8453, id: 8453 },
+    { c: b11155111, id: 11155111 },
+    { c: b56, id: 56 },
+    { c: b137, id: 137 },
+    { c: b2222, id: 2222 },
+    { c: b677, id: 677 },
+    { c: b968, id: 968 },
+  ];
+  const totalBalanceUsdc6 = all.reduce((sum, e) => sum + toPooledUsd6(e.c.balance, e.id), 0n);
 
   return {
     totalBalanceUsdc6,
     byChain,
-    isLoading: all.some((c) => c.isLoading),
+    isLoading: all.some((e) => e.c.isLoading),
     refetch,
   };
 }
@@ -281,7 +299,11 @@ export function useGasTankAllChains(): {
  */
 export function useGasTankLevel(balanceUsdc6: bigint, chainId: number | undefined) {
   const { usdc6: costPerRunUsdc6, source: costSource } = useEffectiveRunPriceUsdc6(chainId);
-  const runsLeft = costPerRunUsdc6 > 0n ? Number(balanceUsdc6 / costPerRunUsdc6) : 0;
+  // Callers pass the pooled 6-decimal total, but the run price is in the chain's own base units.
+  // Both sides have to be on one scale before dividing — otherwise every BSC tank reads as empty,
+  // since a 6-decimal balance over an 18-decimal price truncates to zero runs.
+  const balanceNative = chainId != null ? fromPooledUsd6(balanceUsdc6, chainId) : balanceUsdc6;
+  const runsLeft = costPerRunUsdc6 > 0n ? Number(balanceNative / costPerRunUsdc6) : 0;
   return {
     costPerRunUsdc6,
     /** Who set that price — an operator's flat rate is not the same claim as the contract's. */

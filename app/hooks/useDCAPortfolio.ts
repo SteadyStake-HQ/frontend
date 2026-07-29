@@ -2,6 +2,8 @@
 
 import { useAccount } from "wagmi";
 import { useDCAVaultRead, useDCASchedule } from "./useDCAVault";
+import { useContracts } from "./useContracts";
+import { getStableDecimals } from "@/config/contracts";
 import { formatUnits } from "viem";
 import { REVERSE_FREQUENCY_MAP, SUPPORTED_TOKENS } from "@/lib/constants";
 import { useEffect, useState } from "react";
@@ -89,6 +91,7 @@ export const useDCAPortfolioData = () => {
 // Alternative approach: Hook that fetches a single schedule with all necessary data
 export const useScheduleWithData = (scheduleId: bigint) => {
   const { address } = useAccount();
+  const { chainId } = useContracts();
   const { schedule, isReady, isLoading } = useDCASchedule(scheduleId, address);
   const [planData, setPlanData] = useState<DCAPortfolioPlan | null>(null);
 
@@ -120,9 +123,11 @@ export const useScheduleWithData = (scheduleId: bigint) => {
       "Unknown";
     const amountPerIntervalFormatted = formatUnits(
       amountPerInterval as bigint,
-      6,
+      getStableDecimals(chainId),
     );
-    const remainingNum = Number(formatUnits(totalAmount as bigint, 6));
+    const remainingNum = Number(
+      formatUnits(totalAmount as bigint, getStableDecimals(chainId)),
+    );
     const amountNum = Number(amountPerIntervalFormatted);
     const executed = Number(executedCount);
     // Contract stores remaining; original deposit = remaining + (amountPerInterval * executedCount)
@@ -166,7 +171,7 @@ export const useScheduleWithData = (scheduleId: bigint) => {
         status: active ? "active" : "paused",
       }),
     );
-  }, [schedule]);
+  }, [schedule, chainId]);
 
   return { planData, isLoading };
 };

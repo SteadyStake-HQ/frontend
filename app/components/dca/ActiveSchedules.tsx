@@ -5,6 +5,7 @@ import { useDCAVaultRead, useDCASchedule, useContracts, useStableSymbol } from "
 import { REVERSE_FREQUENCY_MAP, getTokenSymbolForAddress } from "@/lib/constants";
 import { CancelScheduleButton } from "./CancelScheduleButton";
 import { formatUnits } from "viem";
+import { getStableDecimals } from "@/config/contracts";
 
 export const ActiveSchedules = () => {
   const { address, isConnected } = useAccount();
@@ -69,8 +70,8 @@ const ScheduleCard = ({ scheduleId, userAddress }: ScheduleCardProps) => {
   const tokenSymbol = getTokenSymbolForAddress(chainId, schedule.targetToken as string);
 
   const frequency = REVERSE_FREQUENCY_MAP[schedule.frequency as keyof typeof REVERSE_FREQUENCY_MAP];
-  const amountPerInterval = formatUnits(schedule.amountPerInterval, 6);
-  const remainingNum = Number(formatUnits(schedule.totalAmount, 6));
+  const amountPerInterval = formatUnits(schedule.amountPerInterval, getStableDecimals(chainId));
+  const remainingNum = Number(formatUnits(schedule.totalAmount, getStableDecimals(chainId)));
   const amountNum = Number(amountPerInterval);
   const executedCount = Number(schedule.executedCount);
   // Contract stores remaining; original deposit = remaining + (amountPerInterval * executedCount)

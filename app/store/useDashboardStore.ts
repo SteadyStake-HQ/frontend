@@ -5,7 +5,7 @@ import { getBalance, multicall, readContract } from "@wagmi/core";
 import { formatUnits } from "viem";
 import { config } from "@/config/wagmi";
 import { DCA_VAULT_ABI } from "@/config/abis";
-import { getContracts, getTokenList } from "@/config/contracts";
+import { getContracts, getStableDecimals, getTokenList } from "@/config/contracts";
 import { DCA_FREQUENCY_INTERVALS } from "@/app/hooks/useDCAHelpers";
 import { REVERSE_FREQUENCY_MAP } from "@/lib/constants";
 import { getTokenLogoUrl } from "@/lib/token-logo";
@@ -346,8 +346,8 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
 
           const frequencyNum = Number(authoritativeSchedule.frequency);
           const intervalSeconds = DCA_FREQUENCY_INTERVALS[frequencyNum] ?? 86400;
-          const amountNum = Number(formatUnits(authoritativeSchedule.amountPerInterval, 6));
-          const remainingNum = Number(formatUnits(authoritativeSchedule.totalAmount, 6));
+          const amountNum = Number(formatUnits(authoritativeSchedule.amountPerInterval, getStableDecimals(chainId)));
+          const remainingNum = Number(formatUnits(authoritativeSchedule.totalAmount, getStableDecimals(chainId)));
           const executedCount = Number(authoritativeSchedule.executedCount);
           const originalTotalNum = remainingNum + amountNum * executedCount;
           const totalSchedules = Math.max(1, Math.ceil(originalTotalNum / Math.max(amountNum, 0.000001)));

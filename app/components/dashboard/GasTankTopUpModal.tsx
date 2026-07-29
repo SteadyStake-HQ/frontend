@@ -20,7 +20,7 @@ import {
   getChainsWithGasTank,
 } from "@/app/hooks/useGasTank";
 import { GAS_TANK_ABI, ERC20_ABI } from "@/config/abis";
-import { getContracts, getStableSymbol } from "@/config/contracts";
+import { getContracts, getStableDecimals, getStableSymbol } from "@/config/contracts";
 import { SUPPORTED_CHAIN_IDS } from "@/config/chains-env";
 import {
   useRunCostBreakdown,
@@ -39,6 +39,7 @@ import {
   POOLED_SYMBOL,
   formatGasAmount,
   formatRunCostUsd,
+  gasAmountForChain,
   gasAmountFromUsdc6,
 } from "./GasTankVisuals";
 
@@ -95,7 +96,7 @@ function ChainSelect({
   /** A balance only means something where a tank exists; elsewhere say so instead of showing 0.00. */
   const trailing = (cid: number) =>
     hasTank(cid) ? (
-      <span className="gt-select-bal">{gasAmountFromUsdc6(byChain[cid] ?? 0n)}</span>
+      <span className="gt-select-bal">{gasAmountForChain(byChain[cid] ?? 0n, cid)}</span>
     ) : (
       <span className="gt-select-tag">no tank yet</span>
     );
@@ -220,7 +221,7 @@ function RunCostExplainer({ chainId }: { chainId: number }) {
     isLoading,
   } = useRunCostBreakdown(chainId);
 
-  const chargedUsd = Number(formatUnits(costPerRunUsdc6, 6));
+  const chargedUsd = Number(formatUnits(costPerRunUsdc6, getStableDecimals(chainId)));
 
   /**
    * The headline figure for this network. A chain with a tank quotes what that tank is charged; a
@@ -530,7 +531,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
     const trimmed = amount.trim();
     if (!trimmed) return 0n;
     try {
-      return parseUnits(trimmed, 6);
+      return parseUnits(trimmed, getStableDecimals(selectedChainId));
     } catch {
       return 0n;
     }
@@ -691,7 +692,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
       setAmount("");
       await refreshGasTank();
       setStage("done");
-      toast.success(`${gasAmountFromUsdc6(deposited)} ${stable} added to your gas tank.`);
+      toast.success(`${gasAmountForChain(deposited, selectedChainId)} ${stable} added to your gas tank.`);
 
       window.setTimeout(() => {
         setStage(null);
@@ -749,7 +750,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
           ? `Switch, approve & deposit`
           : needsApproval
             ? "Approve & deposit"
-            : `Deposit ${formatGasAmount(Number(formatUnits(amountWei, 6)))} ${stable}`;
+            : `Deposit ${formatGasAmount(Number(formatUnits(amountWei, getStableDecimals(selectedChainId))))} ${stable}`;
 
   return (
     <>
@@ -859,7 +860,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                         <span className="gt-net-bar" aria-hidden>
                           <span className="gt-net-fill" style={{ ["--w" as string]: `${width}%` }} />
                         </span>
-                        <span className="gt-net-amt">{gasAmountFromUsdc6(c.amount)}</span>
+                        <span className="gt-net-amt">{gasAmountForChain(c.amount, c.chainId)}</span>
                       </li>
                     );
                   })}
@@ -942,7 +943,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                       type="button"
                       className="gt-max"
                       disabled={isBusy || walletUsdc === 0n}
-                      onClick={() => setAmount(formatUnits(walletUsdc, 6))}
+                      onClick={() => setAmount(formatUnits(walletUsdc, getStableDecimals(selectedChainId)))}
                     >
                       Max
                     </button>
@@ -965,7 +966,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                       </button>
                     ))}
                     <span className="gt-quick-note">
-                      {usdcBalance ? `${gasAmountFromUsdc6(walletUsdc)} ${stable} in wallet` : " "}
+                      {usdcBalance ? `${gasAmountForChain(walletUsdc, selectedChainId)} ${stable} in wallet` : " "}
                     </span>
                   </div>
 
@@ -975,12 +976,12 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                       Buys about <b>{runsBought > 9999 ? "9,999+" : runsBought.toLocaleString("en-US")}</b> scheduled runs
-                      {" "}({formatRunCostUsd(Number(formatUnits(costPerRunUsdc6, 6)))} {stable} each).
+                      {" "}({formatRunCostUsd(Number(formatUnits(costPerRunUsdc6, getStableDecimals(selectedChainId))))} {stable} each).
                     </p>
                   )}
                   {overBalance && (
                     <p className="gt-hint gt-hint-warn">
-                      That is more than the {gasAmountFromUsdc6(walletUsdc)} {stable} you hold on{" "}
+                      That is more than the {gasAmountForChain(walletUsdc, selectedChainId)} {stable} you hold on{" "}
                       {CHAIN_NAMES[selectedChainId] ?? "this network"}.
                     </p>
                   )}
@@ -1033,7 +1034,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                 </span>
                 <p className="gt-done-title">Tank topped up</p>
                 <p className="gt-done-amount">
-                  +{gasAmountFromUsdc6(addedUsdc6)} <small>{stable}</small>
+                  +{gasAmountForChain(addedUsdc6, freshChainId ?? selectedChainId)} <small>{stable}</small>
                 </p>
                 <p className="gt-done-sub">
                   New balance <b>{gasAmountFromUsdc6(totalBalanceUsdc6)} {POOLED_SYMBOL}</b> — updated everywhere.
