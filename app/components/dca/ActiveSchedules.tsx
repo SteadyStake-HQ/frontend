@@ -2,6 +2,7 @@
 
 import { useAccount } from "wagmi";
 import { useDCAVaultRead, useDCASchedule, useContracts, useStableSymbol } from "@/app/hooks";
+import { derivePlanRuns } from "@/app/hooks/useDCAHelpers";
 import { REVERSE_FREQUENCY_MAP, getTokenSymbolForAddress } from "@/lib/constants";
 import { CancelScheduleButton } from "./CancelScheduleButton";
 import { formatUnits } from "viem";
@@ -72,11 +73,14 @@ const ScheduleCard = ({ scheduleId, userAddress }: ScheduleCardProps) => {
   const frequency = REVERSE_FREQUENCY_MAP[schedule.frequency as keyof typeof REVERSE_FREQUENCY_MAP];
   const amountPerInterval = formatUnits(schedule.amountPerInterval, getStableDecimals(chainId));
   const remainingNum = Number(formatUnits(schedule.totalAmount, getStableDecimals(chainId)));
-  const amountNum = Number(amountPerInterval);
   const executedCount = Number(schedule.executedCount);
   // Contract stores remaining; original deposit = remaining + (amountPerInterval * executedCount)
-  const originalTotalNum = remainingNum + amountNum * executedCount;
-  const totalSchedules = Math.ceil(originalTotalNum / amountNum) || 1;
+  const { committed, runsCount: totalSchedules } = derivePlanRuns(
+    schedule.totalAmount,
+    schedule.amountPerInterval,
+    executedCount,
+  );
+  const originalTotalNum = Number(formatUnits(committed, getStableDecimals(chainId)));
   const executionProgress = (executedCount / totalSchedules) * 100;
 
   return (

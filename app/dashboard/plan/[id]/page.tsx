@@ -7,7 +7,7 @@ import { useAccount, useConfig } from "wagmi";
 import { formatUnits } from "viem";
 import { getStableDecimals } from "@/config/contracts";
 import { useDCASchedule, useContracts, useStableSymbol, usePlanExecutions, type PlanExecution } from "@/app/hooks";
-import { DCA_FREQUENCY_INTERVALS } from "@/app/hooks/useDCAHelpers";
+import { DCA_FREQUENCY_INTERVALS, derivePlanRuns } from "@/app/hooks/useDCAHelpers";
 import { Header } from "@/app/components/Header";
 import { CancelScheduleButton } from "@/app/components/dca/CancelScheduleButton";
 import { ExecuteSwapButton } from "@/app/components/dca/ExecuteSwapButton";
@@ -361,15 +361,23 @@ export default function PlanPage() {
 
     const frequencyNum = Number(schedule.frequency);
     const intervalSeconds = DCA_FREQUENCY_INTERVALS[frequencyNum] ?? 86400;
-    const amountPerRun = Number(formatUnits(schedule.amountPerInterval, getStableDecimals(chainId)));
+    const stableDecimals = getStableDecimals(chainId);
+    const amountPerRun = Number(formatUnits(schedule.amountPerInterval, stableDecimals));
     const executedCount = Number(schedule.executedCount);
 
-    // The contract stores what's left, not what was put in: reconstruct the
-    // original deposit so "how far along am I" has a denominator.
-    const remaining = Number(formatUnits(schedule.totalAmount, getStableDecimals(chainId)));
-    const invested = amountPerRun * executedCount;
-    const totalDeposited = remaining + invested;
-    const runsCount = amountPerRun > 0 ? Math.ceil(totalDeposited / amountPerRun) || 1 : 1;
+    // The contract stores what's left, not what was put in: reconstruct the original deposit so
+    // "how far along am I" has a denominator. Kept in raw units — see derivePlanRuns for why the
+    // dollar figures can't be the ones that get divided.
+    const { committed, runsCount } = derivePlanRuns(
+      schedule.totalAmount,
+      schedule.amountPerInterval,
+      executedCount,
+    );
+    const remaining = Number(formatUnits(schedule.totalAmount, stableDecimals));
+    const totalDeposited = Number(formatUnits(committed, stableDecimals));
+    const invested = Number(
+      formatUnits(schedule.amountPerInterval * schedule.executedCount, stableDecimals),
+    );
     const executionProgress = runsCount > 0 ? (executedCount / runsCount) * 100 : 0;
 
     let status: PlanStatus = "active";

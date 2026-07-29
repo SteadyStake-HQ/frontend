@@ -38,6 +38,37 @@ export const calculateRemainingAmount = (
   return totalAmount - totalExecuted;
 };
 
+/**
+ * Reconstruct a plan's original commitment and its planned run count.
+ *
+ * The contract stores what is *left* (`totalAmount` shrinks with every swap and is zeroed when the
+ * plan closes), so the denominator for "how far along am I" has to be rebuilt as
+ * `remaining + amountPerInterval × executedCount`.
+ *
+ * This must stay in raw token units. Rebuilding it in float dollars puts 0.2 × 3 at
+ * 0.6000000000000001, and `Math.ceil(0.6000000000000001 / 0.2)` is 4 — inventing a run that was
+ * never funded. That fake run then breaks the `executedCount >= runsCount` test, which is the only
+ * signal separating a completed plan from a cancelled one (the contract zeroes `totalAmount` and
+ * clears `active` for both), so a finished plan renders as "Cancelled".
+ */
+export const derivePlanRuns = (
+  /** `schedule.totalAmount` — remaining, raw units */
+  totalAmount: bigint,
+  /** `schedule.amountPerInterval` — per run, raw units */
+  amountPerInterval: bigint,
+  executedCount: number,
+): { committed: bigint; runsCount: number } => {
+  if (amountPerInterval <= BigInt(0)) {
+    return { committed: totalAmount, runsCount: Math.max(1, executedCount) };
+  }
+  const committed = totalAmount + amountPerInterval * BigInt(executedCount);
+  // Integer ceil: a final run funded with less than a full interval still counts as a run.
+  const runs = Number(
+    (committed + amountPerInterval - BigInt(1)) / amountPerInterval,
+  );
+  return { committed, runsCount: Math.max(executedCount, runs, 1) };
+};
+
 export const calculateCancelFee = (remainingAmount: bigint): bigint => {
   const EARLY_CANCEL_FEE = BigInt(300); // 3%
   const EARLY_CANCEL_THRESHOLD = BigInt(5000); // 50%

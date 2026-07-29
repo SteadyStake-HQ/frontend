@@ -6,7 +6,7 @@ import { formatUnits } from "viem";
 import { config } from "@/config/wagmi";
 import { DCA_VAULT_ABI } from "@/config/abis";
 import { getContracts, getStableDecimals, getTokenList } from "@/config/contracts";
-import { DCA_FREQUENCY_INTERVALS } from "@/app/hooks/useDCAHelpers";
+import { DCA_FREQUENCY_INTERVALS, derivePlanRuns } from "@/app/hooks/useDCAHelpers";
 import { REVERSE_FREQUENCY_MAP } from "@/lib/constants";
 import { getTokenLogoUrl } from "@/lib/token-logo";
 
@@ -349,8 +349,12 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
           const amountNum = Number(formatUnits(authoritativeSchedule.amountPerInterval, getStableDecimals(chainId)));
           const remainingNum = Number(formatUnits(authoritativeSchedule.totalAmount, getStableDecimals(chainId)));
           const executedCount = Number(authoritativeSchedule.executedCount);
-          const originalTotalNum = remainingNum + amountNum * executedCount;
-          const totalSchedules = Math.max(1, Math.ceil(originalTotalNum / Math.max(amountNum, 0.000001)));
+          const { committed, runsCount: totalSchedules } = derivePlanRuns(
+            authoritativeSchedule.totalAmount,
+            authoritativeSchedule.amountPerInterval,
+            executedCount,
+          );
+          const originalTotalNum = Number(formatUnits(committed, getStableDecimals(chainId)));
           // The backend's effective due time already folds in a paused countdown a resumed plan is
           // still serving, so the card counts to the moment the buy really happens rather than to
           // the contract cooldown the pause outlived.

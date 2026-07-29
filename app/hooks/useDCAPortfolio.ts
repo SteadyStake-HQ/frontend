@@ -2,6 +2,7 @@
 
 import { useAccount } from "wagmi";
 import { useDCAVaultRead, useDCASchedule } from "./useDCAVault";
+import { derivePlanRuns } from "./useDCAHelpers";
 import { useContracts } from "./useContracts";
 import { getStableDecimals } from "@/config/contracts";
 import { formatUnits } from "viem";
@@ -131,12 +132,16 @@ export const useScheduleWithData = (scheduleId: bigint) => {
     const amountNum = Number(amountPerIntervalFormatted);
     const executed = Number(executedCount);
     // Contract stores remaining; original deposit = remaining + (amountPerInterval * executedCount)
-    const originalTotalNum = remainingNum + amountNum * executed;
+    const { committed, runsCount: totalSchedules } = derivePlanRuns(
+      totalAmount as bigint,
+      amountPerInterval as bigint,
+      executed,
+    );
+    const originalTotalNum = Number(formatUnits(committed, getStableDecimals(chainId)));
     const totalAmountFormatted = originalTotalNum.toFixed(2);
     const totalExecutedFormatted = (executed * amountNum).toFixed(2);
     const remainingFormatted = remainingNum.toFixed(2);
 
-    const totalSchedules = Math.ceil(originalTotalNum / amountNum) || 1;
     const executionProgress = (executed / totalSchedules) * 100;
 
     const nextExecutionTimestamp = Number(lastExecutionTime);
