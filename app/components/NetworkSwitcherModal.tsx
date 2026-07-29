@@ -17,6 +17,10 @@ import { useNetworkAllocation } from "@/app/hooks/useNetworkAllocation";
  * Paused networks are still reachable, in a separate group below the live ones. A pause stops new
  * plans and stops the relayer; it does not touch deposits or gas tank balances, and a user who
  * still has funds on a paused chain has to be able to switch there to get them out.
+ *
+ * When the allocation cannot be read at all, every row is disabled instead. A paused network is a
+ * known state the operator has published — an unreadable list is not, and switching a wallet onto a
+ * network nobody can vouch for is exactly what this modal exists to prevent.
  */
 
 interface Row {
@@ -27,6 +31,8 @@ interface Row {
   offered: boolean;
   paused: boolean;
   note: string | null;
+  /** Not selectable at all — the allocation is missing, so no network can be vouched for. */
+  blocked: boolean;
 }
 
 function ChainAvatar({ name, iconUrl }: { name: string; iconUrl?: string }) {
@@ -51,6 +57,14 @@ export function NetworkSwitcherModal({ onClose }: { onClose: () => void }) {
   const allocation = useNetworkAllocation();
   const [pendingChainId, setPendingChainId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * No network may be selected: either the allocation could not be read, or it has not answered
+   * yet. Both are states in which the modal cannot say what is in service, so it offers nothing —
+   * the rows stay listed and visible so the user can see what the app normally supports, and so the
+   * current network still reads back correctly.
+   */
+  const blocked = allocation.isUnavailable || allocation.isLoading;
 
   const rows = useMemo<Row[]>(() => {
     const byId = new Map(chains.map((c) => [c.id, c]));
@@ -83,15 +97,19 @@ export function NetworkSwitcherModal({ onClose }: { onClose: () => void }) {
           allocation.networks.find((n) => n.chainId === chainId)?.name ??
           `Chain ${chainId}`,
         iconUrl,
-        offered: allocation.acceptsNewPlans(chainId),
+        offered: !blocked && allocation.acceptsNewPlans(chainId),
         paused: allocation.isPaused(chainId),
         note: allocation.note(chainId),
+        blocked,
       };
     });
-  }, [chains, currentChain, allocation]);
+  }, [chains, currentChain, allocation, blocked]);
 
-  const live = rows.filter((r) => r.offered);
-  const outOfService = rows.filter((r) => !r.offered);
+  // With nothing to group by — no row is offered — one flat list under the notice reads as "none of
+  // these are available right now", where an "Out of service" heading would claim the operator took
+  // every network down.
+  const live = blocked ? [] : rows.filter((r) => r.offered);
+  const outOfService = blocked ? [] : rows.filter((r) => !r.offered);
 
   const handleSwitch = useCallback(
     (chainId: number) => {
@@ -131,9 +149,10 @@ export function NetworkSwitcherModal({ onClose }: { onClose: () => void }) {
         key={row.chainId}
         type="button"
         onClick={() => handleSwitch(row.chainId)}
-        disabled={isPending && !switching}
+        disabled={row.blocked || (isPending && !switching)}
+        aria-disabled={row.blocked || undefined}
         className={`nsw-row${isCurrent ? " nsw-row-current" : ""}${row.offered ? "" : " nsw-row-off"}`}
-        title={row.note ?? undefined}
+        title={row.blocked ? "Network availability is unknown right now" : (row.note ?? undefined)}
       >
         <ChainAvatar name={row.name} iconUrl={row.iconUrl} />
         <span className="nsw-name">
@@ -145,6 +164,12 @@ export function NetworkSwitcherModal({ onClose }: { onClose: () => void }) {
             <span className="nsw-spinner" aria-hidden />
             Confirm in wallet
           </span>
+        ) : row.blocked ? (
+          isCurrent ? (
+            <span className="nsw-state">Connected</span>
+          ) : (
+            <span className="nsw-badge">Unavailable</span>
+          )
         ) : isCurrent ? (
           <span className="nsw-state nsw-state-live">
             Connected
@@ -190,9 +215,17 @@ export function NetworkSwitcherModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="nsw-body">
-          {live.map(renderRow)}
+          {blocked && (
+            <p className="nsw-notice">
+              {allocation.isLoading
+                ? "Checking which networks are in service…"
+                : "We can't reach the service that says which networks are in service, so no network can be selected right now. Retrying automatically."}
+            </p>
+          )}
 
-          {outOfService.length > 0 && (
+          {blocked ? rows.map(renderRow) : live.map(renderRow)}
+
+          {!blocked && outOfService.length > 0 && (
             <>
               <p className="nsw-group-label">Out of service</p>
               {outOfService.map(renderRow)}

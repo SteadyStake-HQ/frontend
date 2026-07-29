@@ -84,13 +84,20 @@ function SwitchNetworkButton({ large = false }: { large?: boolean }) {
    * The operator has taken this network out of service. Worth saying on the switcher itself: the
    * user's plans are still there and still theirs, but nothing new will run until it is resumed, and
    * the fix is to switch networks.
+   *
+   * `unavailable` is the other reason nothing is on offer — the allocation could not be read at all.
+   * It gets its own wording because the fix is not to switch networks; there is nothing to switch to
+   * until the service answers.
    */
+  const unavailable = mounted && allocation.isUnavailable;
   const outOfService =
     mounted && isConnected && chain?.id != null && !allocation.acceptsNewPlans(chain.id);
-  const paused = outOfService && chain?.id != null && allocation.isPaused(chain.id);
-  const title = outOfService
-    ? `${chain?.name ?? "This network"} is ${paused ? "paused" : "not in service"} — switch network`
-    : "Switch network";
+  const paused = outOfService && !unavailable && chain?.id != null && allocation.isPaused(chain.id);
+  const title = unavailable
+    ? "Networks unavailable — we can't reach the service that lists them"
+    : outOfService
+      ? `${chain?.name ?? "This network"} is ${paused ? "paused" : "not in service"} — switch network`
+      : "Switch network";
 
   return (
     <button
@@ -123,7 +130,7 @@ function SwitchNetworkButton({ large = false }: { large?: boolean }) {
           className="hidden shrink-0 rounded-full bg-amber-400/15 px-1.5 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide text-amber-500 sm:inline"
           title={title}
         >
-          {paused ? "Paused" : "Offline"}
+          {unavailable ? "Unavailable" : paused ? "Paused" : "Offline"}
         </span>
       ) : null}
       <svg

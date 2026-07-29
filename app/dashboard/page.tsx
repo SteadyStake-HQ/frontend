@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useAccount } from "wagmi";
 import { ConnectWalletGate } from "../components/dashboard/ConnectWalletGate";
 import { NetworkOutOfServiceGate } from "../components/dashboard/NetworkOutOfServiceGate";
+import { NetworksUnavailableGate } from "../components/dashboard/NetworksUnavailableGate";
 import { DashboardWelcome } from "../components/dashboard/DashboardWelcome";
 import { DashboardRefreshButton } from "../components/dashboard/DashboardRefreshButton";
 import { Header } from "../components/Header";
@@ -36,23 +37,37 @@ export default function DashboardPage() {
   );
   const lastFetchKeyRef = useRef<string>("");
 
+  /**
+   * The dashboard does not open until it knows which networks are in service. Waiting on the
+   * allocation as well as on the wallet keeps the two closed states — "this network is paused" and
+   * "we don't know what is in service" — from flashing past on the way in.
+   */
   const isWalletResolving =
-    !hydrated || status === "connecting" || status === "reconnecting";
+    !hydrated || status === "connecting" || status === "reconnecting" || allocation.isLoading;
+
+  /**
+   * The network list could not be read at all. Closed for everyone, connected or not: with no
+   * allocation there is no network the app can honestly offer to work on.
+   */
+  const networksUnavailable = allocation.isUnavailable;
 
   /**
    * The wallet is on a network the operator has paused or removed. The dashboard is closed there
    * outright — see NetworkOutOfServiceGate — so nothing below fetches for it either: a closed
    * network must not be quietly polled for plans and balances in the background.
-   *
-   * `acceptsNewPlans` answers optimistically until the allocation has loaded, so a user on a live
-   * network never sees the gate flash on the way in.
    */
   const outOfService =
-    isConnected && chain?.id != null && !allocation.acceptsNewPlans(chain.id);
+    !networksUnavailable &&
+    isConnected &&
+    chain?.id != null &&
+    !allocation.acceptsNewPlans(chain.id);
+
+  /** Every reason the dashboard's data must not be fetched, in one flag for the effects below. */
+  const closed = networksUnavailable || outOfService;
 
   useEffect(() => {
     if (isWalletResolving) return;
-    if (!isConnected || !address || chainId == null || outOfService) {
+    if (!isConnected || !address || chainId == null || closed) {
       useDashboardStore.getState().resetDashboardData();
       lastFetchKeyRef.current = "";
       return;
@@ -62,10 +77,10 @@ export default function DashboardPage() {
     if (lastFetchKeyRef.current === key) return;
     lastFetchKeyRef.current = key;
     void useDashboardStore.getState().fetchDashboardData({ address, chainId, force: true });
-  }, [isWalletResolving, isConnected, address, chainId, outOfService]);
+  }, [isWalletResolving, isConnected, address, chainId, closed]);
 
   useEffect(() => {
-    if (isWalletResolving || !isConnected || !address || chainId == null || outOfService) return;
+    if (isWalletResolving || !isConnected || !address || chainId == null || closed) return;
 
     const onRefresh = () => {
       void useDashboardStore.getState().fetchDashboardData({ address, chainId, force: true });
@@ -73,10 +88,10 @@ export default function DashboardPage() {
 
     window.addEventListener(DASHBOARD_REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(DASHBOARD_REFRESH_EVENT, onRefresh);
-  }, [isWalletResolving, isConnected, address, chainId, outOfService]);
+  }, [isWalletResolving, isConnected, address, chainId, closed]);
 
   useEffect(() => {
-    if (isWalletResolving || !isConnected || !address || chainId == null || outOfService) return;
+    if (isWalletResolving || !isConnected || !address || chainId == null || closed) return;
 
     const id = window.setInterval(() => {
       const hasActivePlan = useDashboardStore
@@ -92,13 +107,24 @@ export default function DashboardPage() {
     }, 5_000);
 
     return () => window.clearInterval(id);
-  }, [isWalletResolving, isConnected, address, chainId, outOfService]);
+  }, [isWalletResolving, isConnected, address, chainId, closed]);
 
   if (isWalletResolving) {
     return (
       <div className="flex h-screen flex-col overflow-hidden">
         <Header />
         <ConnectWalletGate loading />
+      </div>
+    );
+  }
+
+  // Before the connect gate on purpose: connecting a wallet cannot help when the app does not know
+  // which networks are in service, so it is not offered as the way forward.
+  if (networksUnavailable) {
+    return (
+      <div className="flex h-screen flex-col overflow-hidden">
+        <Header />
+        <NetworksUnavailableGate />
       </div>
     );
   }

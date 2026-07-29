@@ -27,40 +27,17 @@ export interface NetworkAllocationEntry {
 }
 
 export interface NetworkAllocationResponse {
-  /** "backend" when the operator's live allocation was read, "static" when it could not be. */
-  source: "backend" | "static";
+  /**
+   * "backend" when the operator's live allocation was read, "unavailable" when it could not be.
+   *
+   * There is deliberately no third, permissive answer. The build's own chain list says which
+   * networks this app *can* talk to, never which ones are in service — inferring the second from
+   * the first is how a paused or retired network ends up offered to users during an outage. When
+   * the allocation cannot be read the app closes instead: see useNetworkAllocation.
+   */
+  source: "backend" | "unavailable";
   networkType: string;
   networks: NetworkAllocationEntry[];
-}
-
-/**
- * The build's own answer: every network this build can talk to, all in service.
- *
- * This is the fallback, and it is deliberately permissive. An unreachable backend must not take the
- * app's networks away from users mid-session — the build-time list is what the app shipped with, and
- * the relayer enforces pauses on its own side regardless of what the UI believes.
- */
-/**
- * Display name for a chain the build already knows about.
- *
- * The fallback list is rendered to users, so it must not invent placeholder names: `Chain 677` in
- * the network switcher is indistinguishable from a rendering bug. lib/constants names every chain
- * in SUPPORTED_CHAIN_IDS, and `Chain <id>` is left only for an id no table covers.
- */
-function chainName(chainId: number): string {
-  return CHAIN_NAMES[chainId] ?? `Chain ${chainId}`;
-}
-
-function staticNetworks(): NetworkAllocationEntry[] {
-  return SUPPORTED_CHAIN_IDS.map((chainId) => ({
-    chainId,
-    name: chainName(chainId),
-    type: getNetworkType(chainId),
-    status: "enabled" as const,
-    visible: true,
-    acceptsNewPlans: true,
-    note: null,
-  }));
 }
 
 interface BackendNetwork {
@@ -77,6 +54,25 @@ function isStatus(value: unknown): value is NetworkStatus {
   return value === "enabled" || value === "paused" || value === "disabled";
 }
 
+/** How long to wait on the backend before calling it unreachable. */
+const BACKEND_TIMEOUT_MS = 6_000;
+
+/**
+ * The allocation could not be read. Answered with 200 and an empty list rather than an error status
+ * so the client can tell "the operator's list says nothing is open" apart from "this route itself is
+ * broken" — but never cached, because the next request is how the app recovers.
+ */
+function unavailable(): NextResponse {
+  return NextResponse.json(
+    {
+      source: "unavailable",
+      networkType: NETWORK_TYPE,
+      networks: [],
+    } satisfies NetworkAllocationResponse,
+    { headers: { "cache-control": "no-store" } },
+  );
+}
+
 /**
  * GET /api/networks -> { source, networkType, networks[] }
  *
@@ -87,23 +83,20 @@ function isStatus(value: unknown): value is NetworkStatus {
  * frontend can only actually transact on a chain it has a wagmi entry, contract addresses, and a
  * token list for, so a network enabled on the backend but absent from this build is not something
  * the UI can honour by listing it.
+ *
+ * If the backend cannot be read at all, this answers `unavailable` with no networks. The app is
+ * closed while that is true — the dashboard does not open and no network can be selected — because
+ * the alternative is offering networks whose in-service state nobody can currently vouch for.
  */
 export async function GET() {
   const supported = new Set<number>(SUPPORTED_CHAIN_IDS);
-  const fallback: NetworkAllocationResponse = {
-    source: "static",
-    networkType: NETWORK_TYPE,
-    networks: staticNetworks(),
-  };
 
   if (!SCHEDULER_API_URL) {
-    // Silent here would mean an operator pausing a network in the dashboard and seeing nothing
-    // change in the app, with no clue why — the fallback list says every network is in service.
     console.warn(
-      "SCHEDULER_API_URL is not set: serving the build's own network list. " +
-        "Network pauses and removals made in the operator dashboard will NOT reach the frontend.",
+      "SCHEDULER_API_URL is not set: the network allocation cannot be read, so the app has no " +
+        "networks to offer and the dashboard stays closed. Set SCHEDULER_API_URL.",
     );
-    return NextResponse.json(fallback);
+    return unavailable();
   }
 
   const query = NETWORK_TYPE === "all" ? "" : `?type=${encodeURIComponent(NETWORK_TYPE)}`;
@@ -113,14 +106,20 @@ export async function GET() {
       `${SCHEDULER_API_URL.replace(/\/$/, "")}/api/networks${query}`,
       // Short cache, not none: this is read on every page load, and an operator pausing a network
       // can tolerate a few seconds before the UI catches up. The relayer stops immediately either way.
-      { headers: { accept: "application/json" }, next: { revalidate: 10 } },
+      // The timeout matters more than it used to: a hanging backend now holds the whole app on its
+      // loading gate, so "unreachable" has to be an answer this route reaches quickly.
+      {
+        headers: { accept: "application/json" },
+        next: { revalidate: 10 },
+        signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
+      },
     );
     if (!response.ok) {
       console.warn(
-        `Network allocation: backend answered ${response.status} — serving the build's own list. ` +
-          `Pauses and removals will NOT be visible in the app.`,
+        `Network allocation: backend answered ${response.status} — the app has no networks to ` +
+          `offer until it recovers.`,
       );
-      return NextResponse.json(fallback);
+      return unavailable();
     }
     const data = (await response.json()) as { networks?: BackendNetwork[] };
     const networks = (data?.networks ?? [])
@@ -142,15 +141,17 @@ export async function GET() {
       }));
 
     // An empty intersection means the two sides disagree about this deployment entirely (a testnet
-    // backend behind a mainnet frontend, say). Showing nothing would look like an outage, so keep
-    // the build's list and let the relayer be the one that refuses.
+    // backend behind a mainnet frontend, say). There is no network both sides would honour, so the
+    // app has nothing to offer — that is the same closed state as an unreachable backend, and the
+    // warning is what tells the operator it is a misconfiguration rather than an outage.
     if (networks.length === 0) {
       console.warn(
         `Network allocation: the backend returned no network this build supports ` +
           `(NETWORK_TYPE=${NETWORK_TYPE}, build chains=${SUPPORTED_CHAIN_IDS.join(",")}) — ` +
-          `serving the build's own list. Check that the backend and frontend agree on mainnet/testnet.`,
+          `the app has no networks to offer. Check that the backend and frontend agree on ` +
+          `mainnet/testnet.`,
       );
-      return NextResponse.json(fallback);
+      return unavailable();
     }
 
     return NextResponse.json({
@@ -160,10 +161,10 @@ export async function GET() {
     } satisfies NetworkAllocationResponse);
   } catch (error) {
     console.warn(
-      `Network allocation: could not reach ${SCHEDULER_API_URL} — serving the build's own list. ` +
-        `Pauses and removals will NOT be visible in the app.`,
+      `Network allocation: could not reach ${SCHEDULER_API_URL} — the app has no networks to ` +
+        `offer until it recovers.`,
       error,
     );
-    return NextResponse.json(fallback);
+    return unavailable();
   }
 }

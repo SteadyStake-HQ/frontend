@@ -12,6 +12,9 @@ import type {
 /** Long enough that navigating around does not re-ask, short enough that a pause lands quickly. */
 const STALE_MS = 30_000;
 
+/** While the list is unavailable, keep asking: this is what reopens the app once the backend is back. */
+const RETRY_WHILE_CLOSED_MS = 15_000;
+
 export interface NetworkAllocation {
   /** Networks to show, in backend (display) order. Removed networks are already absent. */
   networks: NetworkAllocationEntry[];
@@ -28,9 +31,16 @@ export interface NetworkAllocation {
   acceptsNewPlans: (chainId: number) => boolean;
   /** Operator's note for this network, if any — safe to render to users. */
   note: (chainId: number) => string | null;
-  /** False while the first fetch is in flight; the fallback list is in use until then. */
+  /** The first fetch is still in flight. Nothing is decided yet — hold, do not gate. */
+  isLoading: boolean;
+  /** The allocation has been read successfully and the predicates below are the operator's answer. */
   isLoaded: boolean;
-  /** "static" means the backend could not be read and the build's own list is being shown. */
+  /**
+   * The list could not be read, so the app has no networks it can vouch for. Every predicate is
+   * false while this is true and callers must close: no dashboard, no network selection.
+   */
+  isUnavailable: boolean;
+  /** "unavailable" means the operator's allocation could not be read. */
   source: NetworkAllocationResponse["source"];
 }
 
@@ -42,11 +52,18 @@ export interface NetworkAllocation {
  * pausing a network keeps it visible but read-only, removing one hides it, and neither needs a
  * redeploy.
  *
- * Every predicate answers optimistically before the first response lands, so nothing the user can
- * already see disappears or locks up while this is loading.
+ * Three states, and the difference between the last two is the whole point:
+ *
+ *   loading      — nothing is known yet. Every predicate answers optimistically so a user on a live
+ *                  network never sees a gate flash on the way in; callers wait rather than gate.
+ *   loaded       — the operator's answer, per network.
+ *   unavailable  — the answer could not be read. Every predicate is false and the app closes. The
+ *                  build's chain list is deliberately *not* used as a stand-in: it says what this
+ *                  app can talk to, never what is in service, and offering a network on that basis
+ *                  is how a retired chain gets a new plan created on it during an outage.
  */
 export function useNetworkAllocation(): NetworkAllocation {
-  const { data, isSuccess } = useQuery<NetworkAllocationResponse>({
+  const { data, isPending, isSuccess } = useQuery<NetworkAllocationResponse>({
     queryKey: ["network-allocation"],
     queryFn: async () => {
       const response = await fetch("/api/networks", { headers: { accept: "application/json" } });
@@ -55,33 +72,42 @@ export function useNetworkAllocation(): NetworkAllocation {
     },
     staleTime: STALE_MS,
     refetchOnWindowFocus: true,
-    // The route handler never fails on a backend outage — it answers with the build's own list — so
-    // a rejection here means the frontend itself is unreachable and a retry storm would not help.
+    // A rejection here means the frontend's own route is unreachable, which a retry storm would not
+    // help. One retry covers a blip; past that the app closes and the poll below reopens it.
     retry: 1,
+    // The app is closed while the list is missing, so it has to notice on its own when it is back —
+    // a user staring at the gate should not have to reload to be let in.
+    refetchInterval: (query) =>
+      query.state.data?.source === "backend" ? false : RETRY_WHILE_CLOSED_MS,
   });
 
   return useMemo(() => {
-    const entries = data?.networks ?? [];
+    const entries = data?.source === "backend" ? data.networks : [];
     const byChain = new Map(entries.map((entry) => [entry.chainId, entry]));
     const visible = entries.filter((entry) => entry.visible);
 
-    /** Before the first response, treat the build's list as fully in service. */
-    const pending = entries.length === 0;
+    /** Before the first answer lands, treat the build's list as fully in service. */
+    const pending = isPending;
+    /** Answered, but with nothing the app can offer. */
+    const closed = !pending && entries.length === 0;
 
     return {
-      networks: visible,
+      networks: pending ? [] : visible,
       visibleChainIds: pending ? [...SUPPORTED_CHAIN_IDS] : visible.map((entry) => entry.chainId),
       planEnabledChainIds: pending
         ? [...SUPPORTED_CHAIN_IDS]
         : visible.filter((entry) => entry.acceptsNewPlans).map((entry) => entry.chainId),
-      status: (chainId) => byChain.get(chainId)?.status ?? "enabled",
+      status: (chainId) =>
+        pending ? "enabled" : (byChain.get(chainId)?.status ?? "disabled"),
       isPaused: (chainId) => byChain.get(chainId)?.status === "paused",
       isVisible: (chainId) => (pending ? true : (byChain.get(chainId)?.visible ?? false)),
       acceptsNewPlans: (chainId) =>
         pending ? true : (byChain.get(chainId)?.acceptsNewPlans ?? false),
       note: (chainId) => byChain.get(chainId)?.note ?? null,
-      isLoaded: isSuccess,
-      source: data?.source ?? "static",
+      isLoading: pending,
+      isLoaded: isSuccess && !closed,
+      isUnavailable: closed,
+      source: data?.source ?? "unavailable",
     };
-  }, [data, isSuccess]);
+  }, [data, isPending, isSuccess]);
 }
