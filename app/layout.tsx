@@ -70,6 +70,17 @@ const carterOne = Carter_One({
 
 const SITE_URL = "https://steadystake.org";
 
+// Telegram, X, Discord, Slack and LinkedIn cache a link preview by its image URL and will keep
+// serving the old banner for days. Bump this whenever public/og-image.png is replaced so the
+// crawlers see a URL they have never fetched.
+const OG_IMAGE_VERSION = "2";
+const OG_IMAGE_URL = `${SITE_URL}/og-image.png?v=${OG_IMAGE_VERSION}`;
+
+// Must match the real pixel size of public/og-image.png. Crawlers that trust the declared values
+// over the file (Facebook, LinkedIn) letterbox or crop the banner when these disagree.
+const OG_IMAGE_WIDTH = 1731;
+const OG_IMAGE_HEIGHT = 909;
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
@@ -111,10 +122,12 @@ export const metadata: Metadata = {
       "Multi-chain non-custodial DCA, powered by BOT Chain. Fund your plan + Gas Tank, we execute on schedule. BOT Chain, BNB Chain, Base, Polygon, Kava. steadystake.org",
     images: [
       {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "SteadyStake - Automated Crypto Savings",
+        url: OG_IMAGE_URL,
+        secureUrl: OG_IMAGE_URL,
+        width: OG_IMAGE_WIDTH,
+        height: OG_IMAGE_HEIGHT,
+        type: "image/png",
+        alt: "SteadyStake - Non-Custodial DCA Across Chains",
       },
     ],
   },
@@ -123,7 +136,14 @@ export const metadata: Metadata = {
     title: "SteadyStake – Non-Custodial DCA Across Chains",
     description:
       "Multi-chain non-custodial DCA, powered by BOT Chain. Fund DCA + Gas Tank, we execute on schedule. BOT Chain, BNB Chain, Base, Polygon, Kava. steadystake.org",
-    images: ["/og-image.png"],
+    images: [
+      {
+        url: OG_IMAGE_URL,
+        width: OG_IMAGE_WIDTH,
+        height: OG_IMAGE_HEIGHT,
+        alt: "SteadyStake - Non-Custodial DCA Across Chains",
+      },
+    ],
   },
   robots: {
     index: true,
