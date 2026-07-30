@@ -158,7 +158,8 @@ export default function HeroSection() {
         value: `${animatedUsers.toLocaleString()}+`,
       });
     }
-    if (stats.totalValueUsd > 0) {
+    // Empty string means the hook judged the total too small to headline — see MIN_DISPLAY_USD.
+    if (stats.totalValueFormatted) {
       list.push({
         key: "totalValue",
         label: "Total value",
