@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useGasPrice } from "wagmi";
 import { formatUnits } from "viem";
-import { getSeedGasUnitsPerRun } from "@/config/gas-cost-env";
+import { getGasCostPerRunUsd, getSeedGasUnitsPerRun } from "@/config/gas-cost-env";
 
 /**
  * What one scheduled run costs, measured rather than tabulated.
@@ -199,6 +199,71 @@ export function useRunCostBreakdown(chainId: number | undefined): RunCostBreakdo
     liveUsd,
     cost,
     isLoading: gasLoading || priceLoading,
+  };
+}
+
+/** Where the quoted per-run charge came from, best first. */
+export type RunCostSource = "measured" | "live" | "config";
+
+/** What a run costs on a chain, in dollars, with the evidence behind the figure. */
+export interface RunCostUsd {
+  /** What a run typically costs — the average of real runs where there are any. */
+  typicalUsd: number;
+  /** The worst run observed, for anything sizing a commitment rather than describing one. */
+  worstUsd: number;
+  source: RunCostSource;
+  /** The raw record behind the two figures above: sample count, spread, cross-chain split. */
+  cost: RunCostStats;
+  /** Gas both transactions burn, and whether that is measured or still seeded. */
+  gasUnits: bigint;
+  gasUnitsSource: GasUnitsSource;
+  gasPriceGwei: number | null;
+  nativeUsd: number | null;
+  nativeSource: PriceSource;
+  isLoading: boolean;
+}
+
+/**
+ * What one run costs on a chain, in dollars — the single precedence rule behind every quoted
+ * figure, so the landing page's worked example and the dashboard's prepay cannot disagree.
+ *
+ *   measured — the average of what the last runs on this network really cost. Not an estimate.
+ *   live     — gas price × gas burned × token price, for a chain that has not run yet.
+ *   config   — the build-time per-chain backstop, when even that cannot be read.
+ *
+ * `worstUsd` is the most expensive run in the window, or the typical one where nothing has been
+ * observed: a single seeded estimate is not evidence of a spread, and inventing one would
+ * overstate what a plan needs banked.
+ */
+export function useRunCostUsd(chainId: number | undefined): RunCostUsd {
+  const {
+    liveUsd,
+    cost,
+    gasUnits,
+    gasUnitsSource,
+    gasPriceGwei,
+    nativeUsd,
+    nativeSource,
+    isLoading,
+  } = useRunCostBreakdown(chainId);
+
+  const typicalUsd = cost.avgUsd ?? liveUsd ?? getGasCostPerRunUsd(chainId ?? 0);
+  const source: RunCostSource =
+    cost.avgUsd != null ? "measured" : liveUsd != null ? "live" : "config";
+
+  return {
+    typicalUsd,
+    worstUsd: Math.max(cost.maxUsd ?? 0, typicalUsd),
+    source,
+    cost,
+    gasUnits,
+    gasUnitsSource,
+    gasPriceGwei,
+    nativeUsd,
+    nativeSource,
+    // A measured average is the answer, so there is nothing left to wait for even while the
+    // live-estimate inputs it would have fallen back to are still in flight.
+    isLoading: source === "measured" ? false : isLoading,
   };
 }
 

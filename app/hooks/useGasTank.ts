@@ -21,8 +21,7 @@ export function getChainsWithGasTank(): number[] {
   });
 }
 
-import { getGasCostPerRunUsd } from "@/config/gas-cost-env";
-import { useRunCostBreakdown, type RunCostStats } from "@/app/hooks/useRunCost";
+import { useRunCostUsd, type RunCostStats, type RunCostSource } from "@/app/hooks/useRunCost";
 
 /** A tank that can cover this many runs is drawn full. Nothing on-chain says so — it is a scale. */
 export const RUNS_FOR_FULL_TANK = 100;
@@ -135,8 +134,7 @@ export function useGasTank() {
   };
 }
 
-/** Where the quoted per-run charge came from, best first. */
-export type RunCostSource = "measured" | "live" | "config";
+/* `RunCostSource` now lives in useRunCost.ts, beside the precedence rule that decides it. */
 
 /** A USD figure at the chain's own stablecoin scale, rounded up — never quote below cost. */
 function usdToStableUnits(usd: number, chainId: number | undefined): bigint {
@@ -150,15 +148,11 @@ function usdToStableUnits(usd: number, chainId: number | undefined): bigint {
  * Nobody sets this. The relayer debits the gas a run actually burned — its swap's receipt plus the
  * deduction that follows it, at the chain's gas price and its token's USD price
  * (backend/src/run-executor.ts) — so there is no rate to look up, only a cost to estimate, and the
- * estimate is made from the same three inputs the relayer will settle against:
+ * estimate is made from the same inputs the relayer will settle against — measured, then live,
+ * then the build-time backstop. That precedence lives in `useRunCostUsd`; this wrapper only puts
+ * its answer on the chain's own stablecoin scale.
  *
- *   measured — the average of what the last runs on this network really cost. The best answer
- *              there is, because it is not an estimate at all.
- *   live     — this chain's gas price × the gas a run burns × its token's price, for a network
- *              that has not run yet or whose backend is unreachable.
- *   config   — the build-time per-chain default, when even the live figure cannot be read.
- *
- * Everything user-facing that prices a run goes through here, so the top-up modal, the plan
+ * Everything on-chain-facing that prices a run goes through here, so the top-up modal, the plan
  * creator's prepay and the runs-left gauge can never quote three different figures.
  *
  * `worstUsdc6` is the most expensive run in that window. A charge that follows gas has a spread,
@@ -171,14 +165,7 @@ export function useEstimatedRunCostUsdc6(chainId: number | undefined): {
   source: RunCostSource;
   cost: RunCostStats;
 } {
-  const { liveUsd, cost } = useRunCostBreakdown(chainId);
-
-  const typicalUsd = cost.avgUsd ?? liveUsd ?? getGasCostPerRunUsd(chainId ?? 0);
-  const source: RunCostSource =
-    cost.avgUsd != null ? "measured" : liveUsd != null ? "live" : "config";
-  // The worst observed run, or the typical one where nothing has been observed — a single seeded
-  // estimate is not evidence of a spread, and inventing one would overstate what a plan needs.
-  const worstUsd = Math.max(cost.maxUsd ?? 0, typicalUsd);
+  const { typicalUsd, worstUsd, source, cost } = useRunCostUsd(chainId);
 
   return {
     usdc6: usdToStableUnits(typicalUsd, chainId),

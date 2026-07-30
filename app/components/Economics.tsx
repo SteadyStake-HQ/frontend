@@ -1,62 +1,172 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { RevealOnScroll } from "./RevealOnScroll";
 import { Card3D } from "./Card3D";
-import { DEFAULT_CHAIN_ID, getStableSymbol } from "@/config/contracts";
+import { getStableSymbol } from "@/config/contracts";
+import { SUPPORTED_CHAIN_IDS } from "@/config/chains-env";
+import { useNetworkAllocation } from "@/app/hooks/useNetworkAllocation";
+import { useRunCostUsd } from "@/app/hooks/useRunCost";
 
-/**
- * The landing page has no wallet to read, so it names the default network's settlement
- * stablecoin — "USDT" while BOT Chain leads the network list, "USDC" elsewhere.
- */
-const STABLE = getStableSymbol(DEFAULT_CHAIN_ID);
-
-/** Default gas cost per execution, in that stablecoin. Per network — see config/gas-cost-env.ts. */
-const COST_PER_RUN = 0.01;
-/** We ask users to hold runs x cost x this, so a volatile network can never strand a plan. */
-const GAS_BUFFER = 3;
-/** Illustrative recurring-buy fee charged by a typical centralized venue. */
+/** Illustrative recurring-buy fee charged by a typical centralized venue. The one stand-in left. */
 const COMPARISON_FEE_RATE = 0.01;
 
+/**
+ * The three cadences, over the same year.
+ *
+ * The span is deliberately identical across all three: the point of the comparison below is that
+ * cost tracks *executions*, and a tab that quietly shortened the horizon would hide the effect it
+ * exists to show. Per-run amounts are chosen so all three commit roughly the same capital over
+ * that year — so what actually differs between tabs is 365 runs versus 52 versus 12.
+ */
 const PLANS = [
-  { id: "daily", tab: "Daily", every: "day", amount: 10, runs: 90, span: "90 days" },
-  { id: "weekly", tab: "Weekly", every: "week", amount: 50, runs: 52, span: "1 year" },
-  { id: "monthly", tab: "Monthly", every: "month", amount: 200, runs: 12, span: "1 year" },
+  { id: "daily", tab: "Daily", every: "day", amount: 7, runs: 365 },
+  { id: "weekly", tab: "Weekly", every: "week", amount: 50, runs: 52 },
+  { id: "monthly", tab: "Monthly", every: "month", amount: 215, runs: 12 },
 ] as const;
+
+/**
+ * Networks the worked example can be priced on, in the order the rest of the landing page uses.
+ *
+ * Narrowed to what this build can actually talk to: pricing needs a wagmi transport to read the
+ * chain's gas price, so a mainnet chain listed by a testnet build would quote from the backstop
+ * constant and look measured. If the intersection is empty the full list stands — the card still
+ * needs something to name, and every figure on it is labelled with where it came from.
+ */
+const ALL_PRICEABLE = [
+  { chainId: 677, name: "BOT Chain", icon: "/bot.svg" },
+  { chainId: 8453, name: "Base", icon: "/base.svg" },
+  { chainId: 56, name: "BNB Chain", icon: "/bsc.svg" },
+  { chainId: 137, name: "Polygon", icon: "/polygon.svg" },
+  { chainId: 2222, name: "Kava", icon: "/kava.svg" },
+] as const;
+
+const inBuild = ALL_PRICEABLE.filter((n) => SUPPORTED_CHAIN_IDS.includes(n.chainId));
+const PRICEABLE = inBuild.length > 0 ? inBuild : [...ALL_PRICEABLE];
 
 const usd = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
+/** A per-run charge is often fractions of a cent, where two decimal places round it to nothing. */
+const usdPrecise = (n: number) =>
+  n >= 0.01
+    ? usd(n)
+    : `$${n.toLocaleString("en-US", { maximumSignificantDigits: 2, minimumSignificantDigits: 1 })}`;
+
+/**
+ * The worked example, priced off the network's own record rather than a constant.
+ *
+ * Every figure below except the 1% comparison is read at runtime: what a run costs comes from
+ * `useRunCostUsd`, which prefers the average of real runs on that chain, falls back to a live
+ * gas-price estimate, and only then to the build-time backstop. Which of the three it was is shown
+ * on the row, because "measured over 340 runs" and "estimated" are not the same claim.
+ */
 function Receipt() {
   const [planId, setPlanId] = useState<(typeof PLANS)[number]["id"]>("weekly");
   const plan = PLANS.find((p) => p.id === planId)!;
 
+  const allocation = useNetworkAllocation();
+  /**
+   * Every priceable network stays on screen with the operator's live answer attached, rather than
+   * the paused ones being filtered out. Two reasons: a list that shrinks when the allocation lands
+   * makes the card jump, and a visitor comparing networks is better served by "Base is paused"
+   * than by Base silently vanishing — which is the same thing the grid above already tells them.
+   *
+   * Only an open network can be selected, so the example is never priced as though a plan started
+   * today on a paused chain would run. If nothing is open — every network on hold, or the
+   * allocation unreachable — the list is left selectable: this card quotes costs and claims
+   * nothing about service, so it stays useful while the app above it is closed.
+   */
+  const { networks, openIds } = useMemo(() => {
+    const open = PRICEABLE.filter((n) => allocation.acceptsNewPlans(n.chainId)).map(
+      (n) => n.chainId,
+    );
+    return {
+      networks: PRICEABLE,
+      openIds: new Set<number>(open.length > 0 ? open : PRICEABLE.map((n) => n.chainId)),
+    };
+  }, [allocation]);
+
+  const [chainId, setChainId] = useState<number>(PRICEABLE[0].chainId);
+  const active = openIds.has(chainId)
+    ? chainId
+    : (networks.find((n) => openIds.has(n.chainId)) ?? networks[0]).chainId;
+
+  const run = useRunCostUsd(active);
+  const stable = getStableSymbol(active);
+
   const capital = plan.amount * plan.runs;
-  const gasSpent = plan.runs * COST_PER_RUN;
-  const gasHeld = gasSpent * GAS_BUFFER;
+  const gasSpent = plan.runs * run.typicalUsd;
+  // What the plan needs banked, sized the way the app itself sizes it: the worst run this network
+  // has had, times the run count. The old 3x buffer is gone — see useGasTank.ts.
+  const prepay = plan.runs * run.worstUsd;
   const elsewhere = capital * COMPARISON_FEE_RATE;
-  const gasBarPct = Math.max((gasSpent / elsewhere) * 100, 1.5);
+  const gasBarPct = Math.min(Math.max((gasSpent / elsewhere) * 100, 1.5), 100);
+  // Only claimed once it rounds to something worth claiming — an expensive chain against a small
+  // plan can land under 2x, and "1x cheaper" would be a boast the bars themselves contradict.
+  const ratio = gasSpent > 0 ? Math.round(elsewhere / gasSpent) : 0;
+  const cheaperBy = ratio >= 2 ? ratio : null;
+
+  /**
+   * Nothing derived from the per-run cost may be shown until one is settled on. The gap matters:
+   * the backstop constant is deliberately overstated on some chains, so a note that quoted it
+   * while the headline still read "—" would put a number on screen that no one stands behind.
+   */
+  const pending = run.isLoading;
+  const measured = run.source === "measured";
+  const samples = run.cost.samples;
+  const evidence = measured
+    ? `Average of the last ${samples.toLocaleString("en-US")} run${samples === 1 ? "" : "s"} settled on this network`
+    : run.source === "live"
+      ? `Live estimate: ${run.gasPriceGwei?.toFixed(2) ?? "—"} gwei x ${(Number(run.gasUnits) / 1000).toFixed(0)}k gas, ${run.gasUnitsSource === "measured" ? "measured" : "seeded"} gas units`
+      : "No measurement or live gas price available for this network yet";
 
   return (
     <div className="ec-receipt">
-      <div className="ec-tabs" role="tablist" aria-label="Example DCA plan">
-        {PLANS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            role="tab"
-            aria-selected={p.id === planId}
-            className={`ec-tab ${p.id === planId ? "ec-tab-on" : ""}`}
-            onClick={() => setPlanId(p.id)}
-          >
-            {p.tab}
-          </button>
-        ))}
+      <div className="ec-picker">
+        <div className="ec-tabs" role="tablist" aria-label="Example DCA plan">
+          {PLANS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              role="tab"
+              aria-selected={p.id === planId}
+              className={`ec-tab ${p.id === planId ? "ec-tab-on" : ""}`}
+              onClick={() => setPlanId(p.id)}
+            >
+              {p.tab}
+            </button>
+          ))}
+        </div>
+
+        <div className="ec-tabs ec-tabs-net" role="tablist" aria-label="Network to price this plan on">
+          {networks.map((n) => {
+            const open = openIds.has(n.chainId);
+            return (
+              <button
+                key={n.chainId}
+                type="button"
+                role="tab"
+                aria-selected={n.chainId === active}
+                disabled={!open}
+                title={open ? undefined : `${n.name} is not accepting new plans right now`}
+                className={`ec-tab ec-tab-net ${n.chainId === active ? "ec-tab-on" : ""} ${
+                  open ? "" : "ec-tab-off"
+                }`}
+                onClick={() => setChainId(n.chainId)}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={n.icon} alt="" width={14} height={14} aria-hidden />
+                {n.name}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <p className="ec-plan-line">
-        <strong>{usd(plan.amount)}</strong> every {plan.every} for <strong>{plan.span}</strong> — that&apos;s{" "}
-        <strong>{plan.runs} executions</strong>.
+        <strong>{usd(plan.amount)}</strong> every {plan.every} for <strong>1 year</strong> — that&apos;s{" "}
+        <strong>{plan.runs.toLocaleString("en-US")} executions</strong>.
       </p>
 
       {/* What the plan costs to run */}
@@ -81,33 +191,68 @@ function Receipt() {
 
         <div className="ec-line">
           <dt>
-            Gas actually spent
+            <span className="ec-dt-row">
+              Cost of one run
+              {pending ? null : (
+                <span className={`ec-src ${measured ? "ec-src-measured" : ""}`} title={evidence}>
+                  {measured ? `measured · ${samples.toLocaleString("en-US")} runs` : "estimated"}
+                </span>
+              )}
+            </span>
             <span className="ec-line-note">
-              {plan.runs} runs x {usd(COST_PER_RUN)}
+              {!pending && run.cost.minUsd != null && run.worstUsd > run.cost.minUsd
+                ? `${usdPrecise(run.cost.minUsd)} – ${usdPrecise(run.worstUsd)} across those runs`
+                : "the gas the relayer burned, billed at cost"}
             </span>
           </dt>
-          <dd className="ec-cost">{usd(gasSpent)}</dd>
+          <dd className="ec-cost">{pending ? "—" : usdPrecise(run.typicalUsd)}</dd>
+        </div>
+
+        <div className="ec-line">
+          <dt>
+            Gas for the whole plan
+            <span className="ec-line-note">
+              {plan.runs.toLocaleString("en-US")} runs x{" "}
+              {pending ? "one run" : usdPrecise(run.typicalUsd)}
+            </span>
+          </dt>
+          <dd className="ec-cost">{pending ? "—" : usd(gasSpent)}</dd>
         </div>
 
         <div className="ec-line ec-line-muted">
           <dt>
-            Gas Tank you hold
-            <span className="ec-line-note">{GAS_BUFFER}x safety buffer — unspent {STABLE} is withdrawable</span>
+            Gas Tank to fund it
+            {/* Identical to the row above until this network has a spread to size against — which
+                is why the note says which of the two it is rather than claiming a worst case that
+                no run has established. */}
+            <span className="ec-line-note">
+              {run.worstUsd > run.typicalUsd
+                ? `sized on this network's worst run — unspent ${stable} is withdrawable`
+                : `no run history yet, so sized on the estimate — unspent ${stable} is withdrawable`}
+            </span>
           </dt>
-          <dd>{usd(gasHeld)}</dd>
+          <dd>{pending ? "—" : usd(prepay)}</dd>
         </div>
       </dl>
 
       {/* The whole argument, in one comparison */}
       <div className="ec-compare">
-        <p className="ec-compare-title">Cost to run this plan</p>
+        <p className="ec-compare-title">
+          Cost to run this plan
+          {!pending && cheaperBy != null ? (
+            <span className="ec-compare-chip">{cheaperBy.toLocaleString("en-US")}x cheaper</span>
+          ) : null}
+        </p>
 
         <div className="ec-bar-row">
           <span className="ec-bar-label">SteadyStake</span>
           <div className="ec-bar-track">
-            <span className="ec-bar ec-bar-good" style={{ width: `${gasBarPct}%` }} />
+            <span
+              className="ec-bar ec-bar-good"
+              style={{ width: pending ? "0%" : `${gasBarPct}%` }}
+            />
           </div>
-          <span className="ec-bar-value ec-bar-value-good">{usd(gasSpent)}</span>
+          <span className="ec-bar-value ec-bar-value-good">{pending ? "—" : usd(gasSpent)}</span>
         </div>
 
         <div className="ec-bar-row">
@@ -125,8 +270,8 @@ function Receipt() {
       </div>
 
       <p className="ps-disclaimer">
-        Illustrative. Gas is {usd(COST_PER_RUN)} per run by default and configured per network; the 1% comparison
-        is a stand-in for typical recurring-buy fees, not a quote from any specific venue.
+        The plan amount is an example — the per-run cost is not, and 1% is a stand-in for typical
+        recurring-buy fees rather than a quote from any venue.
       </p>
     </div>
   );
@@ -145,9 +290,9 @@ const FLOWS = [
     theme: "peach" as const,
     tag: "Prepaid",
     title: "Gas Tank",
-    body: `One ${STABLE} balance, shared across every network. Each run deducts a fixed amount and reimburses the relayer that paid the on-chain gas.`,
+    body: "One stablecoin balance, shared across every network. Each run deducts the gas the relayer actually burned — billed at cost, never a markup.",
     meter: 12,
-    meterLabel: "Fixed cost per execution",
+    meterLabel: "Charged at cost, per execution",
   },
 ] as const;
 
@@ -193,8 +338,8 @@ export function Economics() {
           <p className="ps-eyebrow mx-auto mb-4">Economics &amp; value</p>
           <h2 className="section-title mb-4 text-center">You pay for executions. Nothing else.</h2>
           <p className="section-title-sub mx-auto mb-12 text-center">
-            There are exactly two balances in SteadyStake — and only one of them is a cost. Pick a plan below to
-            see the whole bill.
+            There are exactly two balances in SteadyStake — and only one of them is a cost. Pick a plan and a
+            network below: the bill is priced from what runs there really cost.
           </p>
         </RevealOnScroll>
 

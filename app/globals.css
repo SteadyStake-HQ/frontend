@@ -6600,6 +6600,15 @@ a[href] {
   }
 }
 
+/* Cadence and network pickers share a row on wide cards and stack on narrow ones. */
+.ec-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .ec-tabs {
   display: inline-flex;
   gap: 0.25rem;
@@ -6607,6 +6616,46 @@ a[href] {
   border: 1px solid color-mix(in srgb, var(--hero-muted) 22%, transparent);
   background: color-mix(in srgb, var(--hero-muted) 8%, transparent);
   padding: 0.25rem;
+}
+
+/* The network list is longer than the cadence one, so it wraps rather than overflowing the card. */
+.ec-tabs-net {
+  flex-wrap: wrap;
+}
+
+.ec-tab-net {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+.ec-tab-net img {
+  border-radius: 9999px;
+  /* Brand marks read as decoration next to a selected pill; the label carries the meaning. */
+  opacity: 0.85;
+}
+.ec-tab-on img {
+  opacity: 1;
+}
+
+/**
+ * A network the operator is not accepting new plans on. Kept in place rather than removed so the
+ * row does not reflow when the allocation lands — struck through because "you cannot start here"
+ * has to survive a glance, and dimming alone reads as a hover state.
+ */
+.ec-tab-off {
+  cursor: not-allowed;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  opacity: 0.45;
+}
+.ec-tab-off:hover {
+  color: var(--hero-muted);
+}
+.ec-tab-off img {
+  filter: grayscale(1);
 }
 
 .ec-tab {
@@ -6682,6 +6731,39 @@ a[href] {
   color: var(--hero-muted);
 }
 
+/* Label plus its provenance badge, on one baseline. */
+.ec-dt-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/**
+ * Where a quoted cost came from. Deliberately reads as a badge rather than a footnote: "measured
+ * over 340 runs" and "estimated" are different claims, and the difference belongs next to the
+ * number, not under it. The full evidence is on the element's title.
+ */
+.ec-src {
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--hero-muted) 28%, transparent);
+  background: color-mix(in srgb, var(--hero-muted) 10%, transparent);
+  padding: 0.08rem 0.45rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--hero-muted);
+  cursor: help;
+}
+
+.ec-src-measured {
+  border-color: color-mix(in srgb, var(--hero-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--hero-primary) 14%, transparent);
+  color: var(--hero-primary);
+}
+
 .ec-line-good dd {
   color: var(--hero-primary);
 }
@@ -6713,12 +6795,24 @@ a[href] {
 }
 
 .ec-compare-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   margin-bottom: 0.9rem;
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--hero-muted);
+}
+
+/* The ratio the two bars already show, stated once so it survives a glance. */
+.ec-compare-chip {
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--hero-primary) 16%, transparent);
+  padding: 0.1rem 0.5rem;
+  letter-spacing: 0.03em;
+  color: var(--hero-primary);
 }
 
 .ec-bar-row {
