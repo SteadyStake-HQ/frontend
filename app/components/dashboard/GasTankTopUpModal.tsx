@@ -13,7 +13,6 @@ import {
   useWriteContract,
 } from "wagmi";
 import {
-  useEffectiveRunPriceUsdc6,
   useGasTankAllChains,
   useGasTankLevel,
   useGasTankRefresh,
@@ -159,50 +158,39 @@ function ChainMark({ chainId, className }: { chainId: number; className?: string
 }
 
 /**
- * Where the per-run price comes from, for the network the wallet is on.
+ * What a run costs on the network the wallet is on, and what recent ones actually cost.
  *
  * The tank is held in a stablecoin, but nothing on chain is paid in it: the relayer signs two
  * transactions for every scheduled run — the swap itself, and the recordExecution that debits
- * this tank — and pays for both in the network's own token. The price the tank is charged is
- * those two fees valued at that token's USD price, which is the only reason a run on a chain
- * with sub-cent fees can still cost fifty cents on one whose token trades in the hundreds.
+ * this tank — and pays for both in the network's own token. What the tank is charged is those two
+ * fees valued at that token's USD price, which is the only reason a run on a chain with sub-cent
+ * fees can still cost fifty cents on one whose token trades in the hundreds.
  *
- * Every term is read live (see useRunCostBreakdown): gas price from the chain, token price from
- * /api/native-price, the charge itself from whoever set it for this network — an operator's flat
- * rate where one is set, the GasTank contract otherwise (useEffectiveRunPriceUsdc6). Collapsed by
- * default — the headline price is what most people came for, and the arithmetic behind it should
- * not push the balance and the top-up field off screen.
+ * Nobody sets that figure. The relayer debits what the run burned, so the headline here is an
+ * estimate of the next run rather than a rate — every term of it is read live (see
+ * useRunCostBreakdown): gas price from the chain, token price from /api/native-price, gas units
+ * from the receipts of real runs. Collapsed by default; the headline is what most people came for.
+ *
+ * Because that figure moves, the panel also publishes what the last runs on this network were
+ * really charged — the average and the most expensive of them. An estimate alone invites a user to
+ * treat it as a fixed price and then read the next one as a bug; the range is what makes a
+ * variable charge something a person can plan around.
  *
  * The network is the one the wallet is connected to — whatever RainbowKit's switcher is showing —
  * and not the one picked in the top-up section below. Those are two different questions. The
- * selector answers "which tank am I putting money into", which on a mainnet build can only be BOT
- * Chain because it is the only network with a tank deployed; this answers "what does a run cost on
- * the network I am on", which is a real question about Base or Polygon whether or not either can
- * be funded yet. Keying this off the selector meant the modal opened on BOT Chain's numbers no
- * matter what the wallet was connected to, which is what made the section look hardwired.
+ * selector answers "which tank am I putting money into"; this answers "what does a run cost on the
+ * network I am on", which is a real question about Base or Polygon whether or not either can be
+ * funded yet.
  *
- * Two rules keep it honest on a network other than the one with the tank, because "0.06 USDT,
- * flat rate" under Base's name is worse than saying nothing:
- *
- *   - Where no tank is deployed there is no charge to quote, so the headline is the live cost of a
- *     run on that chain instead — gas price x measured gas units x the token's USD price — and is
- *     labelled an estimate. The build-time per-chain default is deliberately not used here: it is
- *     the constant we fall back to when nobody has set a price, not a fact about the network.
- *   - Where even that cannot be read — an RPC we cannot reach, a token no feed prices — the whole
- *     section hides. A breakdown with every row blank teaches a user nothing, and one that keeps
- *     the last chain's numbers actively misleads them.
+ * Where nothing can be read — an RPC we cannot reach, a token no feed prices — the whole section
+ * hides. A breakdown with every row blank teaches a user nothing, and one that keeps the last
+ * chain's numbers actively misleads them.
  */
 function RunCostExplainer({ chainId }: { chainId: number }) {
   const [open, setOpen] = useState(false);
   const symbol = getNativeSymbol(chainId);
   const stable = getStableSymbol(chainId);
   const chainName = CHAIN_NAMES[chainId] ?? `Chain ${chainId}`;
-  /**
-   * Read here rather than handed down from the top-up section: that section resolves the price of
-   * the chain being funded, and this one is describing the chain the wallet is on. They are the
-   * same number only when those two happen to agree.
-   */
-  const { usdc6: costPerRunUsdc6, source: costSource } = useEffectiveRunPriceUsdc6(chainId);
   /**
    * Whether a run on this network charges anything at all. Only the tank's own address decides
    * that — the settlement stablecoin matters for making a deposit, not for whether a debit exists.
@@ -214,59 +202,26 @@ function RunCostExplainer({ chainId }: { chainId: number }) {
     nativeUsd,
     nativeSource,
     liveUsd,
-    gasPriceGwei,
-    gasUnits,
-    gasUnitsSource,
-    gasUnitsSamples,
+    cost,
     isLoading,
   } = useRunCostBreakdown(chainId);
 
-  const chargedUsd = Number(formatUnits(costPerRunUsdc6, getStableDecimals(chainId)));
-
   /**
-   * The headline figure for this network. A chain with a tank quotes what that tank is charged; a
-   * chain without one has no charge to quote, so it quotes what a run there costs right now.
-   * Null means neither is knowable and the section has nothing to say — see the early return.
+   * The headline: what the next run on this network will cost, at this minute's gas price and
+   * token price. Null means it cannot be read at all and the section has nothing to say.
    */
-  const headlineUsd = hasGasTank ? chargedUsd : liveUsd;
-  const headline = headlineUsd != null ? formatRunCostUsd(headlineUsd) : null;
+  const headline = liveUsd != null ? formatRunCostUsd(liveUsd) : null;
   /**
-   * A charge is denominated in the token the tank holds; an estimate is not denominated in
-   * anything, because no tank on this network holds it. Quoting the estimate in USDC would imply
-   * one does — dollars are the honest unit for a figure nobody is charged in.
+   * A charge is denominated in the token the tank holds; an estimate for a network with no tank is
+   * not denominated in anything. Quoting the latter in USDC would imply a tank exists to hold it.
    */
   const headlineUnit = hasGasTank ? stable : POOLED_SYMBOL;
+  const headlineFrom = hasGasTank
+    ? "charged as spent · estimate"
+    : `estimated live · no tank on ${chainName} yet`;
 
-  /**
-   * Where the figure came from. A rate someone chose, a rate written into the contract, and a cost
-   * we worked out ourselves are three different claims, and the difference is exactly what a user
-   * asking "who decided this?" wants.
-   */
-  const headlineFrom = !hasGasTank
-    ? `estimated live · no tank on ${chainName} yet`
-    : costSource === "operator"
-      ? "flat rate, set per network"
-      : costSource === "contract"
-        ? "flat rate, set on-chain"
-        : "flat rate, default";
-
-  /**
-   * Gas moves; the flat rate is only re-set when someone changes it. Saying so beats letting
-   * a user find the gap themselves and conclude the number is made up — but only call it out once
-   * it is wide enough to notice, or every rounding difference reads as a warning. Silent where no
-   * tank exists: the headline is already the live figure there, so there is no gap to report.
-   */
-  const driftNote = (() => {
-    if (!hasGasTank) return null;
-    if (liveUsd == null || chargedUsd <= 0) return null;
-    const drift = (liveUsd - chargedUsd) / chargedUsd;
-    if (Math.abs(drift) < 0.25) return null;
-    const live = formatRunCostUsd(liveUsd);
-    const charged = formatRunCostUsd(chargedUsd);
-    return drift > 0
-      ? `${symbol} or gas has risen since the rate was set — a run costs the relayer about ${live} ${stable} today, and you are still charged ${charged}.`
-      : `Gas is cheaper than when the rate was set — a run costs the relayer about ${live} ${stable} today, against the ${charged} charged.`;
-  })();
+  /** The window the range below is drawn from — the relayer keeps the last thousand per network. */
+  const runsLabel = `last ${cost.samples.toLocaleString("en-US")} run${cost.samples === 1 ? "" : "s"}`;
 
   if (headline == null) {
     /*
@@ -308,14 +263,13 @@ function RunCostExplainer({ chainId }: { chainId: number }) {
           <span className="gt-why-chain">on {chainName}</span>
           {/*
             The panel is collapsed by default, so anything that only appears once it is open will
-            be missed by most people. A figure that moves has to say so where the figure is.
+            be missed by most people. This figure moves — it is gas priced this minute, not a rate
+            — and has to say so where the figure is, not only inside the panel.
           */}
-          {!hasGasTank && (
-            <span className="gt-why-tag">
-              <span className="gt-why-tag-dot" aria-hidden />
-              live estimate
-            </span>
-          )}
+          <span className="gt-why-tag">
+            <span className="gt-why-tag-dot" aria-hidden />
+            live estimate
+          </span>
         </span>
         <span className="gt-why-price">
           {headline} <small>{headlineUnit}</small>
@@ -374,59 +328,62 @@ function RunCostExplainer({ chainId }: { chainId: number }) {
               </dt>
               <dd>{headline} {headlineUnit}</dd>
             </div>
-          </dl>
 
-          <p className="gt-why-note">
-            {hasGasTank ? (
+            {/*
+              The range behind that estimate, from the runs themselves. Two rows rather than one
+              because they answer different questions — the average is what a month of runs will
+              cost, the maximum is what has to be in the tank for the busiest day not to stall a
+              plan — and a user sizing a top-up needs the second one.
+            */}
+            {cost.avgUsd != null && cost.maxUsd != null && (
               <>
-                Each run is two transactions our relayer signs and pays for in {symbol} — the swap
-                on {chainName}, and the record that debits this tank. Their combined fee at{" "}
-                {symbol}&apos;s USD price is what the {headline} {headlineUnit} covers. It is a flat
-                rate, not a meter: a run that costs the relayer more never charges you extra.
-              </>
-            ) : (
-              <>
-                Each run is two transactions our relayer signs and pays for in {symbol} — the swap
-                on {chainName}, and the record of it. Their combined fee at {symbol}&apos;s USD
-                price is the {headline} {headlineUnit} above. No gas tank is deployed on {chainName}{" "}
-                yet, so nothing charges you that — it is what a run here costs to run.
+                <div className="gt-why-row">
+                  <dt>
+                    Average run <span>{runsLabel} · {chainName}</span>
+                  </dt>
+                  <dd>{formatRunCostUsd(cost.avgUsd)} {headlineUnit}</dd>
+                </div>
+                <div className="gt-why-row">
+                  <dt>
+                    Most expensive run <span>{runsLabel} · {chainName}</span>
+                  </dt>
+                  <dd>{formatRunCostUsd(cost.maxUsd)} {headlineUnit}</dd>
+                </div>
               </>
             )}
-          </p>
+          </dl>
 
           {/*
-            Said plainly, and given its own box, because the two numbers behind an estimate are
-            exactly the two a user does not expect to move: gas rises when the network is busy, and
-            the token it is paid in is repriced by a market that never closes. Without this the
-            figure reads like a rate someone set, and every later reading of it looks like a bug.
-            Only for the estimate — a flat rate genuinely does not move, and saying it might would
-            be the same mistake in the other direction.
+            The one thing about this charge a user cannot work out from the rows above.
+            Balances are pooled, so a run on this network can be settled from another network's
+            tank — and when it is, the deduction transaction runs over there, at that chain's gas
+            price, in that chain's token. The run costs a little more, through no decision of ours,
+            and someone who tops up one network and runs plans on another should hear it before the
+            charge rather than after. Where the relayer has actually settled runs both ways on this
+            network, the two averages are quoted instead of the general statement — a measured
+            premium beats "a bit more".
           */}
-          {!hasGasTank && (
-            <p className="gt-why-live">
-              <span className="gt-why-live-dot" aria-hidden />
-              <span>
-                <b>This figure moves.</b> It is {chainName}&apos;s gas price and {symbol}&apos;s USD
-                price as they stand this minute — a busy network raises the first, the market moves
-                the second, and either changes what a run here costs. Both are re-read while this
-                panel is open, so expect the number to differ from one visit to the next.
-              </span>
-            </p>
-          )}
-
-          {driftNote && <p className="gt-why-drift">{driftNote}</p>}
-
-          {gasPriceGwei != null && (
-            <p className="gt-why-meta">
-              Live gas price {formatNativeAmount(gasPriceGwei)} gwei ·{" "}
-              {Number(gasUnits).toLocaleString("en-US")} gas per run{" "}
-              {gasUnitsSource === "measured"
-                ? `(measured from the last ${gasUnitsSamples} run${gasUnitsSamples === 1 ? "" : "s"})`
-                : "(estimated — no runs measured yet)"}
-              {/* The callout above already says this where it matters; no need to say it twice. */}
-              {hasGasTank ? " · re-read while this stays open." : ""}
-            </p>
-          )}
+          <p className="gt-why-live">
+            <span className="gt-why-live-dot" aria-hidden />
+            <span>
+              <b>Paying from another network costs a little more.</b>{" "}
+              {cost.crossChainAvgUsd != null && cost.sameChainAvgUsd != null ? (
+                <>
+                  Runs on {chainName} settled from another network&apos;s tank have averaged{" "}
+                  {formatRunCostUsd(cost.crossChainAvgUsd)} against{" "}
+                  {formatRunCostUsd(cost.sameChainAvgUsd)} for those paid from this one — the
+                  deduction runs on the paying network, at its gas price.
+                </>
+              ) : (
+                <>
+                  Your balance is one pool, so a run here can be paid out of any network&apos;s
+                  tank. When it is, the transaction that debits it runs on that network and is
+                  charged at that network&apos;s gas price — so keeping a balance on {chainName}{" "}
+                  is the cheapest way to run plans on {chainName}.
+                </>
+              )}
+            </span>
+          </p>
           </div>
         </div>
       </div>

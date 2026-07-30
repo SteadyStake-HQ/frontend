@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { useAccount, useBalance, useReadContract, useReadContracts, useWaitForTransactionReceipt } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
-import { useDCAVault, useDCAVaultRead, useTokenApproval, useTokenAllowance, useContracts, useStableSymbol, useGasTank, useGasTankAllChains, useGasTankLevel, useGasTankRefresh, useEffectiveRunPriceUsdc6, useNetworkAllocation } from "@/app/hooks";
+import { useDCAVault, useDCAVaultRead, useTokenApproval, useTokenAllowance, useContracts, useStableSymbol, useGasTank, useGasTankAllChains, useGasTankLevel, useGasTankRefresh, useEstimatedRunCostUsdc6, useNetworkAllocation } from "@/app/hooks";
 import { GasTankGauge, formatGasAmount } from "./GasTankVisuals";
 import { CHAIN_NAMES, FREQUENCY_MAP } from "@/lib/constants";
 import { useSupportedTokens } from "@/app/hooks/useSupportedTokens";
@@ -518,12 +518,19 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
       ? parseUnits((parseFloat(amountPerInterval) * runCountNum).toFixed(6), stableDecimals)
       : 0n;
   /**
-   * What one run will charge on this network — the operator's flat rate where one is set, the
-   * GasTank's own rate otherwise. The same hook the top-up modal and the tank gauge use, so a plan
-   * cannot be prepaid at one price and then executed at another.
+   * What a run costs on this network. `costPerRunUsdc6` is the typical one, for anything quoted to
+   * the user; `worstRunUsdc6` is the most expensive of the last runs there. The same hook the
+   * top-up modal and the tank gauge use, so a plan cannot be quoted at one figure and executed
+   * against another.
    */
-  const { usdc6: costPerRunUsdc6 } = useEffectiveRunPriceUsdc6(chainId);
-  const requiredGasForPlan = totalRuns > 0 && chainId ? costPerRunUsdc6 * BigInt(totalRuns) : 0n;
+  const { usdc6: costPerRunUsdc6, worstUsdc6: worstRunUsdc6 } = useEstimatedRunCostUsdc6(chainId);
+  /*
+   * Prepaid at the worst run rather than the typical one. The charge follows gas now, so a plan
+   * funded at the average is funded for a calm month and stalls the first time the network is
+   * busy — and the money is the user's own tank balance either way, refundable by withdrawing it,
+   * so erring high costs them nothing and erring low costs them a missed buy.
+   */
+  const requiredGasForPlan = totalRuns > 0 && chainId ? worstRunUsdc6 * BigInt(totalRuns) : 0n;
   /**
    * The tank already holds enough — across all networks — to run this plan end to end.
    * `gasTankBalance` is the pooled 6-decimal total while `requiredGasForPlan` is in this chain's
@@ -1606,10 +1613,21 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                               {gasUsdc(requiredGasFormatted)}. Top up to cover it.
                             </p>
                           )}
+                          {/*
+                            Balances are pooled, so this plan will run — but the run is charged what
+                            it burns, and the transaction that debits another network's tank runs on
+                            that network, at its gas price. Paying from elsewhere is therefore a
+                            little dearer than paying from here, and that is worth knowing while the
+                            top-up is still a choice.
+                          */}
                           {effectiveGasSource === "tank" && gasPaidCrossChain && gasPayingChainName && (
                             <p className="dm-gassrc-note">
                               Gas will be charged to your <strong>{gasPayingChainName}</strong> tank — you
-                              have no balance on this network. Balances are shared across networks.
+                              have no balance on this network. Balances are shared across networks, but
+                              each run costs a little more this way: the charge is the gas it burns, and
+                              debiting a {gasPayingChainName} tank means a transaction on{" "}
+                              {gasPayingChainName} too. Topping up on this network is the cheaper way
+                              to run plans here.
                             </p>
                           )}
                         </div>

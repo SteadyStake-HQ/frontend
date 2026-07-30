@@ -59,31 +59,43 @@ In `backend/`:
 | `RELAYER_PRIVATE_KEY` | Wallet that sends executeSwap and recordExecution; must be GasTank executor and hold native gas token. |
 | `SUPABASE_DB_URL` | Supabase Postgres (Session Pooler) connection string, shared with the frontend; stores the registered-user list. |
 | `ZERO_EX_API_KEY` | Optional; for 0x swap quotes. |
-| `GAS_COST_PER_EXECUTION_USDC` | **Last fallback.** Per-execution cost in USDC (e.g. `0.01`), used only when neither an operator price nor the GasTank's own `gasCostPerExecutionUsdc6` is set. See "Per-run price" below. |
-| `ADMIN_API_TOKEN` | Required to change the per-run price, hold a plan, or allocate a network from the operator dashboard. Unset = those endpoints refuse every request. |
+| `ADMIN_API_TOKEN` | Required to hold a plan or allocate a network from the operator dashboard. Unset = those endpoints refuse every request. |
 
 Which networks the relayer runs on is not an env variable: it is every chain with a deployed
 GasTank, minus the ones an operator has paused or removed under **Networks** on the dashboard.
 
-#### Per-run price
+#### What a run costs
 
-What a run charges a user's tank is resolved in one order, by the relayer and the app alike — a
-number the UI quotes and the relayer does not debit is what lets a fully funded plan run its tank
-dry mid-way:
+Nobody sets a per-run price. A run is charged the gas it burned:
 
-1. **Operator price** — set per network on the backend dashboard at `/run-price.html`, stored by
-   `backend/src/run-price.ts` (Supabase `kv_store`, or `run-price.json` when no database is
-   configured). Changeable without a transaction, which is why it wins.
-2. **`gasCostPerExecutionUsdc6`** on that chain's GasTank — an owner-only transaction
-   (`scripts/set-gas-cost.js`).
-3. **`GAS_COST_PER_EXECUTION_USDC`** for a chain where neither is set.
-4. Otherwise each run is charged what it measured, so the amount moves with gas.
+```
+charge = swap receipt (gasUsed × effectiveGasPrice)      ← exact, from the chain
+       + deduction leg (measured gas × gas price × 1.2)  ← estimated; its receipt does not exist yet
+       × the native token's USD price
+```
 
-The dashboard shows each network's flat rate beside what a run costs the relayer right now (gas
-price × measured gas × native token price), so a rate can be set against the live cost rather than
-guessed. The app reads the operator price through `/api/run-price` and the rest from the chain
-(`useEffectiveRunPriceUsdc6`). A price change reaches the relayer within ~30s and the app within
-~2 minutes of caching, so avoid changing a price and quoting the new one in the same breath.
+stated in the paying tank's stablecoin and **rounded up** at every step, so a rounding never leaves
+the relayer holding part of a user's gas bill. Both prices are read live per chain — gas price from
+the node, token price from `/api/native-price` — and held for the length of one sweep, so two users
+executed by the same pass are charged against the same reading.
+
+The deduction leg is the one figure that has to be predicted rather than read, because the amount
+it debits is an argument to the transaction that debits it. It is priced from the gas that chain's
+own `recordExecution` calls have really burned (`backend/src/gas-profile.ts`, seeded at 60,000
+until a chain has run), plus 20%.
+
+Balances are pooled, so a run on one network can be settled from another network's tank. When it
+is, the deduction runs on the paying network at that network's gas price, in that network's token
+— which is why a cross-network run costs more, and why the app says so before it happens.
+
+Every completed run reports back to `gas-profile.ts`, which keeps the last **1,000** per chain:
+the gas, for pricing the next run's deduction leg, and the charge, for the average and worst-case
+figures the gas tank modal publishes. The app reads both through `/api/gas-profile`
+(`useRunGasProfile` → `useEstimatedRunCostUsdc6`); a run's cost reaches it within ~5 minutes of
+caching.
+
+The GasTank's own `gasCostPerExecutionUsdc6` still exists on chain and nothing reads it —
+`recordExecution` debits whatever the relayer passes, which is the receipt's cost.
 
 Run once:
 

@@ -13307,28 +13307,12 @@ div.gt-why-toggle:hover {
   color: color-mix(in srgb, var(--hero-primary) 80%, var(--foreground));
 }
 
-.gt-why-note,
-.gt-why-drift,
-.gt-why-meta {
-  font-size: 0.68rem;
-  font-weight: 550;
-  line-height: 1.5;
-  color: var(--hero-muted);
-}
-
-.gt-why-drift {
-  margin-top: 0.4rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 0.55rem;
-  background: color-mix(in srgb, #f59e0b 12%, transparent);
-  color: color-mix(in srgb, #f59e0b 85%, var(--foreground));
-}
-
 /*
  * --- A figure that moves ---
  * The estimate is not a rate anyone set: it is two live readings multiplied together, and it will
- * read differently on the next visit. That is normal and has to look normal, so this is the accent
- * colour rather than the amber of gt-why-drift — a warning tone would say something is wrong.
+ * read differently on the next visit. Same for the cross-network premium below it: it is how the
+ * charge works, not a fault. Both are the accent colour rather than a warning amber, which would
+ * say something is wrong.
  */
 .gt-why-tag {
   display: inline-flex;

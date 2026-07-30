@@ -22,7 +22,7 @@ export function getChainsWithGasTank(): number[] {
 }
 
 import { getGasCostPerRunUsd } from "@/config/gas-cost-env";
-import { useOperatorRunPriceUsdc6 } from "@/app/hooks/useRunCost";
+import { useRunCostBreakdown, type RunCostStats } from "@/app/hooks/useRunCost";
 
 /** A tank that can cover this many runs is drawn full. Nothing on-chain says so — it is a scale. */
 export const RUNS_FOR_FULL_TANK = 100;
@@ -135,72 +135,66 @@ export function useGasTank() {
   };
 }
 
-/** Where the per-run charge came from, in the order it is resolved. */
-export type RunPriceSource = "operator" | "contract" | "config";
+/** Where the quoted per-run charge came from, best first. */
+export type RunCostSource = "measured" | "live" | "config";
 
-/**
- * What one run charges this network's tank, and who decided it.
- *
- * Three parties can set this and they are tried in the order the relayer tries them
- * (backend/src/run-executor.ts), because a number the UI quotes and the relayer does not debit is
- * worse than no number at all:
- *
- *   operator — a flat rate set per network on the backend dashboard. Editable without a
- *              transaction, which is why it outranks the contract.
- *   contract — the GasTank's own gasCostPerExecutionUsdc6, changed only by an owner tx.
- *   config   — the build-time per-chain default, for a chain where neither is set.
- *
- * Everything user-facing that prices a run goes through here, so the top-up modal, the plan
- * creator's prepay and the runs-left gauge can never quote three different prices.
- */
-export function useEffectiveRunPriceUsdc6(chainId: number | undefined): {
-  usdc6: bigint;
-  source: RunPriceSource;
-} {
-  const { usdc6: operatorUsdc6 } = useOperatorRunPriceUsdc6(chainId);
-  const contractUsdc6 = useGasCostPerExecutionForChain(chainId ?? 0);
-
-  if (operatorUsdc6 != null && operatorUsdc6 > 0n) {
-    return { usdc6: operatorUsdc6, source: "operator" };
-  }
-  if (contractUsdc6 > 0n) {
-    return { usdc6: contractUsdc6, source: "contract" };
-  }
-  // The config default is a USD figure; scale it by the chain's own stablecoin decimals so the
-  // fallback is comparable with the operator and contract prices above, which are already native.
-  const configUsd = getGasCostPerRunUsd(chainId ?? 0);
-  const configUsdc6 =
-    (BigInt(Math.max(1, Math.ceil(configUsd * 1_000_000))) *
-      10n ** BigInt(getStableDecimals(chainId ?? 0))) /
-    1_000_000n;
-  return {
-    usdc6: configUsdc6 > 0n ? configUsdc6 : 1n,
-    source: "config",
-  };
+/** A USD figure at the chain's own stablecoin scale, rounded up — never quote below cost. */
+function usdToStableUnits(usd: number, chainId: number | undefined): bigint {
+  const micros = BigInt(Math.max(1, Math.ceil(usd * 1_000_000)));
+  return (micros * 10n ** BigInt(getStableDecimals(chainId ?? 0))) / 1_000_000n;
 }
 
-/** Gas cost per execution (USDC 6 decimals) from contract for a chain. Returns 0n if no GasTank or not set. */
-export function useGasCostPerExecutionForChain(chainId: number): bigint {
-  const contracts = getContracts(chainId);
-  const gasTank = contracts?.GasTank;
-  const hasGasTank = gasTank && gasTank !== ZERO;
-  const { data } = useReadContract({
-    address: hasGasTank ? (gasTank as `0x${string}`) : undefined,
-    abi: GAS_TANK_ABI,
-    functionName: "gasCostPerExecutionUsdc6",
-    args: [],
-    chainId,
-    query: { enabled: !!hasGasTank, staleTime: 60_000 },
-  });
-  return data ?? 0n;
+/**
+ * What one run will charge this network's tank.
+ *
+ * Nobody sets this. The relayer debits the gas a run actually burned — its swap's receipt plus the
+ * deduction that follows it, at the chain's gas price and its token's USD price
+ * (backend/src/run-executor.ts) — so there is no rate to look up, only a cost to estimate, and the
+ * estimate is made from the same three inputs the relayer will settle against:
+ *
+ *   measured — the average of what the last runs on this network really cost. The best answer
+ *              there is, because it is not an estimate at all.
+ *   live     — this chain's gas price × the gas a run burns × its token's price, for a network
+ *              that has not run yet or whose backend is unreachable.
+ *   config   — the build-time per-chain default, when even the live figure cannot be read.
+ *
+ * Everything user-facing that prices a run goes through here, so the top-up modal, the plan
+ * creator's prepay and the runs-left gauge can never quote three different figures.
+ *
+ * `worstUsdc6` is the most expensive run in that window. A charge that follows gas has a spread,
+ * and anything sizing a *commitment* — how much a plan needs banked to see itself through — has to
+ * be sized on the bad day, not the average one.
+ */
+export function useEstimatedRunCostUsdc6(chainId: number | undefined): {
+  usdc6: bigint;
+  worstUsdc6: bigint;
+  source: RunCostSource;
+  cost: RunCostStats;
+} {
+  const { liveUsd, cost } = useRunCostBreakdown(chainId);
+
+  const typicalUsd = cost.avgUsd ?? liveUsd ?? getGasCostPerRunUsd(chainId ?? 0);
+  const source: RunCostSource =
+    cost.avgUsd != null ? "measured" : liveUsd != null ? "live" : "config";
+  // The worst observed run, or the typical one where nothing has been observed — a single seeded
+  // estimate is not evidence of a spread, and inventing one would overstate what a plan needs.
+  const worstUsd = Math.max(cost.maxUsd ?? 0, typicalUsd);
+
+  return {
+    usdc6: usdToStableUnits(typicalUsd, chainId),
+    worstUsdc6: usdToStableUnits(worstUsd, chainId),
+    source,
+    cost,
+  };
 }
 
 /*
  * `requiredGasUsdc6` / `requiredGasUsdc6Exact` used to live here: totalRuns × the build-time
  * per-chain constant, one with a 3x buffer. They priced a plan off a number no operator could
  * change and the relayer never charged, so a plan prepaid through them could still run its tank
- * dry. Multiply useEffectiveRunPriceUsdc6 by the run count instead — that is the price the
- * relayer debits, whoever set it.
+ * dry. Multiply useEstimatedRunCostUsdc6's `worstUsdc6` by the run count instead — that is what
+ * the relayer will debit on the network's worst observed run, which is the figure a prepay has to
+ * survive.
  */
 
 /**
@@ -340,9 +334,13 @@ export function useGasTankAllChains(forChainId?: number): {
  *
  * A raw USDC figure means nothing at cents scale — "0.0250 USDC" reads as empty until you know a
  * run costs 0.001. Runs are the unit users actually care about, and the level drives the gauges.
+ *
+ * Counted at the typical cost rather than the worst one: this answers "how far does this go",
+ * which is a question about the ordinary case. Sizing a plan's prepay is the opposite question and
+ * uses `worstUsdc6`.
  */
 export function useGasTankLevel(balanceUsdc6: bigint, chainId: number | undefined) {
-  const { usdc6: costPerRunUsdc6, source: costSource } = useEffectiveRunPriceUsdc6(chainId);
+  const { usdc6: costPerRunUsdc6, source: costSource } = useEstimatedRunCostUsdc6(chainId);
   // Callers pass the pooled 6-decimal total, but the run price is in the chain's own base units.
   // Both sides have to be on one scale before dividing — otherwise every BSC tank reads as empty,
   // since a 6-decimal balance over an 18-decimal price truncates to zero runs.
