@@ -13218,6 +13218,80 @@ div.gt-why-toggle:hover {
   color: var(--hero-primary);
 }
 
+/*
+ * The measured range — average and worst run — sitting above the disclosure rather than inside it.
+ * Two cells, because they are two different claims: the average is the divisor behind the tank's
+ * runs-left count, the maximum is what a prepay has to survive. The average carries the accent for
+ * that reason, matching the gauge it explains.
+ */
+.gt-why-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0 0.75rem 0.6rem;
+}
+
+.gt-why-stat {
+  flex: 1 1 8.5rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.42rem 0.55rem;
+  border-radius: 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--hero-muted) 15%, transparent);
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
+  cursor: help;
+}
+
+.gt-why-stat.is-avg {
+  border-color: color-mix(in srgb, var(--hero-primary) 32%, transparent);
+  background: color-mix(in srgb, var(--hero-primary) 8%, transparent);
+}
+
+.gt-why-stat em {
+  font-size: 0.56rem;
+  font-weight: 800;
+  font-style: normal;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--hero-muted);
+}
+
+.gt-why-stat b {
+  font-size: 0.8rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+.gt-why-stat.is-avg b {
+  color: var(--hero-primary);
+}
+
+.gt-why-stat b small {
+  margin-left: 0.2rem;
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--hero-muted);
+}
+
+.gt-why-stat-tag {
+  font-size: 0.56rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: color-mix(in srgb, var(--hero-muted) 80%, transparent);
+}
+
+.gt-why-range-note {
+  flex: 1 0 100%;
+  font-size: 0.56rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--hero-muted) 72%, transparent);
+}
+
 /* Height reveal via the 0fr -> 1fr grid trick: animatable, and no max-height guess to outgrow. */
 .gt-why-wrap {
   display: grid;
@@ -13338,30 +13412,103 @@ div.gt-why-toggle:hover {
   animation: gt-why-pulse 2s ease-in-out infinite;
 }
 
-.gt-why-live {
-  display: flex;
-  gap: 0.45rem;
+/* --- Cross-network premium ---------------------------------------------------------------------
+   A comparison, so it is drawn. Two bars on one scale beat the paragraph that used to sit here:
+   the gap between them is the claim, and the eye takes it in without reading a sentence. */
+
+.gt-cross {
   margin-top: 0.45rem;
-  padding: 0.42rem 0.55rem;
+  padding: 0.48rem 0.6rem 0.42rem;
   border-radius: 0.55rem;
   border: 1px solid color-mix(in srgb, var(--hero-primary) 24%, transparent);
   background: color-mix(in srgb, var(--hero-primary) 9%, transparent);
-  font-size: 0.68rem;
-  font-weight: 550;
-  line-height: 1.5;
-  color: color-mix(in srgb, var(--hero-muted) 90%, var(--foreground));
 }
 
-.gt-why-live b {
+.gt-cross-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.66rem;
   font-weight: 800;
+  letter-spacing: -0.005em;
   color: color-mix(in srgb, var(--hero-primary) 85%, var(--foreground));
 }
 
-.gt-why-live-dot {
-  margin-top: 0.42rem;
-  width: 0.38rem;
-  height: 0.38rem;
+.gt-cross-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.24rem;
+  margin-top: 0.4rem;
+}
+
+.gt-cross-row {
+  display: grid;
+  grid-template-columns: minmax(4.2rem, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.gt-cross-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--hero-muted);
+}
+
+.gt-cross-track {
+  height: 0.42rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  overflow: hidden;
+}
+
+.gt-cross-fill {
+  display: block;
+  width: var(--w, 0%);
+  height: 100%;
+  border-radius: 999px;
+  transform-origin: left center;
+  animation: gt-cross-grow 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* The two bars are the same measurement under two conditions, so they are one hue at two
+   strengths — different colours would read as different quantities. */
+.gt-cross-fill.is-same {
+  background: color-mix(in srgb, var(--hero-primary) 62%, transparent);
+}
+
+.gt-cross-fill.is-cross {
+  background: #f59e0b;
+}
+
+.gt-cross-row b {
+  font-size: 0.64rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--foreground);
+}
+
+.gt-cross-foot {
+  margin-top: 0.3rem;
+  font-size: 0.62rem;
+  font-weight: 550;
+  line-height: 1.45;
+  color: var(--hero-muted);
+}
+
+.gt-cross-head .gt-why-live-dot {
+  width: 0.34rem;
+  height: 0.34rem;
   color: var(--hero-primary);
+}
+
+@keyframes gt-cross-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 
 @keyframes gt-why-pulse {
@@ -13380,7 +13527,8 @@ div.gt-why-toggle:hover {
    has asked for stillness. The copy carries the same meaning without it. */
 @media (prefers-reduced-motion: reduce) {
   .gt-why-tag-dot,
-  .gt-why-live-dot {
+  .gt-why-live-dot,
+  .gt-cross-fill {
     animation: none;
   }
 }
@@ -13684,6 +13832,15 @@ div.gt-why-toggle:hover {
 .gt-switch-copy b {
   font-weight: 800;
   color: var(--foreground);
+}
+
+/* The reason, kept to one quiet line under the two network names it belongs to. */
+.gt-switch-copy span {
+  display: block;
+  margin-top: 0.12rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--hero-muted) 80%, transparent);
 }
 
 .gt-switch-btn {

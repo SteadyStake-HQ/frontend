@@ -1,6 +1,13 @@
 /**
- * Gas cost per DCA execution (USD) per chain. Used for "required gas tank" estimate (×3 buffer).
- * Set NEXT_PUBLIC_GAS_COST_PER_EXECUTION_USDC for default, or per-chain:
+ * The last-resort per-run cost, in USD, per chain.
+ *
+ * Not a price. Nobody sets what a run costs any more — a run is charged the gas it burned, and
+ * every screen quotes either the average of real runs on that chain or a live estimate of the next
+ * one (useEstimatedRunCostUsdc6). This file is only what those two fall back to when a chain has
+ * never run and its gas price cannot be read, so that a modal has some number to divide by rather
+ * than showing a blank.
+ *
+ * Set NEXT_PUBLIC_GAS_COST_PER_EXECUTION_USDC for the default, or per-chain:
  * NEXT_PUBLIC_GAS_COST_PER_EXECUTION_USDC_84532=0.01
  * NEXT_PUBLIC_GAS_COST_PER_EXECUTION_USDC_8453=0.02
  * A new chain must be added to RAW_BY_CHAIN below or its per-chain var is ignored.
@@ -10,10 +17,13 @@ import { SUPPORTED_CHAIN_IDS } from "./chains-env";
 const DEFAULT_USD = 0.01;
 
 /**
- * Per-chain default (USD) used when the on-chain gasCostPerExecutionUsdc6 is 0 AND no
- * NEXT_PUBLIC_GAS_COST_PER_EXECUTION_USDC_<chain> override is set. The on-chain value is
- * always the source of truth (see useGasTank.ts); this only backstops the quote/estimate.
- * BOT Chain (mainnet 677 / testnet 968) bills $0.50 per automation execution.
+ * Per-chain backstop (USD), used only when neither a measured average nor a live estimate can be
+ * had and no NEXT_PUBLIC_GAS_COST_PER_EXECUTION_USDC_<chain> override is set. The on-chain
+ * `gasCostPerExecutionUsdc6` is *not* consulted — nothing in the app reads it (see abis.ts).
+ *
+ * The BOT Chain figure is a pre-measurement guess from when a run there was priced rather than
+ * metered; measured runs on 677 come in far under it. It is left high on purpose — a backstop that
+ * overstates makes a tank read emptier than it is, which is the safe direction to be wrong in.
  */
 const DEFAULT_BY_CHAIN: Record<number, number> = {
   677: 0.5,

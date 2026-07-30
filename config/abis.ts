@@ -246,13 +246,11 @@ export const GAS_TANK_ABI = [
     outputs: [{ name: "", type: "uint256" }],
     stateMutability: "view",
   },
-  {
-    type: "function",
-    name: "gasCostPerExecutionUsdc6",
-    inputs: [],
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-  },
+  /*
+   * `gasCostPerExecutionUsdc6` is not declared here. The contract still has it, but a run is
+   * charged the gas it burned rather than any set price, so nothing in the app may read it —
+   * keeping it callable only invited a screen to quote a price no user is charged.
+   */
   {
     type: "function",
     name: "deposit",

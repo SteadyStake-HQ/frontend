@@ -158,6 +158,67 @@ function ChainMark({ chainId, className }: { chainId: number; className?: string
 }
 
 /**
+ * The premium for paying a run out of another network's tank, drawn rather than described.
+ *
+ * Two bars on a shared scale: what a run on this network has cost when its own tank paid, and what
+ * it has cost when another network's did. The gap is the whole point and the eye reads it without
+ * being told the number twice. Where the relayer has not settled runs both ways here there is
+ * nothing to compare, so the rule itself is stated in one line instead.
+ */
+function CrossChainPremium({
+  chainName,
+  unit,
+  sameChainAvgUsd,
+  crossChainAvgUsd,
+}: {
+  chainName: string;
+  unit: string;
+  sameChainAvgUsd: number | null;
+  crossChainAvgUsd: number | null;
+}) {
+  const measured = sameChainAvgUsd != null && crossChainAvgUsd != null;
+  const peak = measured ? Math.max(sameChainAvgUsd, crossChainAvgUsd) : 0;
+  /** A bar never disappears: below a few percent it stops reading as a quantity at all. */
+  const width = (value: number) => `${Math.max(8, peak > 0 ? (value / peak) * 100 : 0)}%`;
+
+  return (
+    <div className="gt-cross">
+      <p className="gt-cross-head">
+        <span className="gt-why-live-dot" aria-hidden />
+        Paying from another network costs more
+      </p>
+
+      {measured ? (
+        <div className="gt-cross-bars">
+          <div className="gt-cross-row">
+            <span className="gt-cross-label">from {chainName}</span>
+            <span className="gt-cross-track" aria-hidden>
+              <i className="gt-cross-fill is-same" style={{ ["--w" as string]: width(sameChainAvgUsd) }} />
+            </span>
+            <b>{formatRunCostUsd(sameChainAvgUsd)}</b>
+          </div>
+          <div className="gt-cross-row">
+            <span className="gt-cross-label">from elsewhere</span>
+            <span className="gt-cross-track" aria-hidden>
+              <i className="gt-cross-fill is-cross" style={{ ["--w" as string]: width(crossChainAvgUsd) }} />
+            </span>
+            <b>{formatRunCostUsd(crossChainAvgUsd)}</b>
+          </div>
+          <p className="gt-cross-foot">
+            average {unit} per run on {chainName} · the debit runs on the paying network
+          </p>
+        </div>
+      ) : (
+        <p className="gt-cross-foot">
+          The debit runs on the paying network, at its gas price — a balance on {chainName} is the
+          cheapest way to run plans there.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * What a run costs on the network the wallet is on, and what recent ones actually cost.
  *
  * The tank is held in a stablecoin, but nothing on chain is paid in it: the relayer signs two
@@ -171,10 +232,16 @@ function ChainMark({ chainId, className }: { chainId: number; className?: string
  * useRunCostBreakdown): gas price from the chain, token price from /api/native-price, gas units
  * from the receipts of real runs. Collapsed by default; the headline is what most people came for.
  *
- * Because that figure moves, the panel also publishes what the last runs on this network were
+ * Because that figure moves, the section also publishes what the last runs on this network were
  * really charged — the average and the most expensive of them. An estimate alone invites a user to
  * treat it as a fixed price and then read the next one as a bug; the range is what makes a
  * variable charge something a person can plan around.
+ *
+ * Those two sit *outside* the disclosure, not in it. The average is not a footnote to the estimate
+ * — it is the number the tank's runs-left count is worked out at (useEstimatedRunCostUsdc6 prefers
+ * the measured average over the live estimate), so leaving it behind a tap meant the headline
+ * figure of the whole modal, "36 runs", had no visible arithmetic. The maximum rides with it
+ * because the two answer different questions and a user sizing a top-up needs the second.
  *
  * The network is the one the wallet is connected to — whatever RainbowKit's switcher is showing —
  * and not the one picked in the top-up section below. Those are two different questions. The
@@ -222,6 +289,11 @@ function RunCostExplainer({ chainId }: { chainId: number }) {
 
   /** The window the range below is drawn from — the relayer keeps the last thousand per network. */
   const runsLabel = `last ${cost.samples.toLocaleString("en-US")} run${cost.samples === 1 ? "" : "s"}`;
+  /** The same window said as a phrase, for the tips — "the last 1 run" does not read as English. */
+  const windowLabel =
+    cost.samples === 1
+      ? "the one run recorded"
+      : `the last ${cost.samples.toLocaleString("en-US")} runs`;
 
   if (headline == null) {
     /*
@@ -280,6 +352,40 @@ function RunCostExplainer({ chainId }: { chainId: number }) {
       </button>
 
       {/*
+        What runs here have really cost, always on screen. The estimate above is about the next
+        run; these two are the record, and the average is the one the runs-left gauge divides by —
+        so each says what it is *for* rather than leaving the reader to infer it. Two short cells
+        and a tag apiece; the sentence-length version of the same point lives on the hover tip.
+      */}
+      {cost.avgUsd != null && cost.maxUsd != null && (
+        <div className="gt-why-range">
+          <span
+            className="gt-why-stat is-avg"
+            title={`The mean of ${windowLabel} on ${chainName}. Your runs-left count is your tank balance divided by this.`}
+          >
+            <em>Average run</em>
+            <b>
+              {formatRunCostUsd(cost.avgUsd)} <small>{headlineUnit}</small>
+            </b>
+            <span className="gt-why-stat-tag">runs left counts at this</span>
+          </span>
+          <span
+            className="gt-why-stat"
+            title={`The dearest of ${windowLabel} on ${chainName}. Size a plan's prepay on this, not on the average — a busy day is what stalls a plan.`}
+          >
+            <em>Most expensive</em>
+            <b>
+              {formatRunCostUsd(cost.maxUsd)} <small>{headlineUnit}</small>
+            </b>
+            <span className="gt-why-stat-tag">size a prepay on this</span>
+          </span>
+          <span className="gt-why-range-note">
+            {runsLabel} · {chainName}
+          </span>
+        </div>
+      )}
+
+      {/*
         gt-why-panel is the element the 0fr grid row collapses, so it carries no padding of its
         own — padding survives a zero-height row and would leave the first line of the breakdown
         peeking out below the toggle. All spacing lives on gt-why-inner instead.
@@ -328,62 +434,29 @@ function RunCostExplainer({ chainId }: { chainId: number }) {
               </dt>
               <dd>{headline} {headlineUnit}</dd>
             </div>
-
             {/*
-              The range behind that estimate, from the runs themselves. Two rows rather than one
-              because they answer different questions — the average is what a month of runs will
-              cost, the maximum is what has to be in the tank for the busiest day not to stall a
-              plan — and a user sizing a top-up needs the second one.
+              The average and the maximum used to close the list here. They now live above the
+              disclosure, where the runs-left count they explain can be seen at the same time.
             */}
-            {cost.avgUsd != null && cost.maxUsd != null && (
-              <>
-                <div className="gt-why-row">
-                  <dt>
-                    Average run <span>{runsLabel} · {chainName}</span>
-                  </dt>
-                  <dd>{formatRunCostUsd(cost.avgUsd)} {headlineUnit}</dd>
-                </div>
-                <div className="gt-why-row">
-                  <dt>
-                    Most expensive run <span>{runsLabel} · {chainName}</span>
-                  </dt>
-                  <dd>{formatRunCostUsd(cost.maxUsd)} {headlineUnit}</dd>
-                </div>
-              </>
-            )}
           </dl>
 
           {/*
             The one thing about this charge a user cannot work out from the rows above.
             Balances are pooled, so a run on this network can be settled from another network's
             tank — and when it is, the deduction transaction runs over there, at that chain's gas
-            price, in that chain's token. The run costs a little more, through no decision of ours,
-            and someone who tops up one network and runs plans on another should hear it before the
-            charge rather than after. Where the relayer has actually settled runs both ways on this
-            network, the two averages are quoted instead of the general statement — a measured
-            premium beats "a bit more".
+            price. The run costs a little more, through no decision of ours.
+
+            This used to be a paragraph saying so. It is now two bars, because the claim is a
+            comparison and a comparison is a thing to see: where the relayer has actually settled
+            runs both ways on this network the measured premium is drawn to scale, and where it has
+            not, one short line stands in. Either way it reads in a glance instead of a sentence.
           */}
-          <p className="gt-why-live">
-            <span className="gt-why-live-dot" aria-hidden />
-            <span>
-              <b>Paying from another network costs a little more.</b>{" "}
-              {cost.crossChainAvgUsd != null && cost.sameChainAvgUsd != null ? (
-                <>
-                  Runs on {chainName} settled from another network&apos;s tank have averaged{" "}
-                  {formatRunCostUsd(cost.crossChainAvgUsd)} against{" "}
-                  {formatRunCostUsd(cost.sameChainAvgUsd)} for those paid from this one — the
-                  deduction runs on the paying network, at its gas price.
-                </>
-              ) : (
-                <>
-                  Your balance is one pool, so a run here can be paid out of any network&apos;s
-                  tank. When it is, the transaction that debits it runs on that network and is
-                  charged at that network&apos;s gas price — so keeping a balance on {chainName}{" "}
-                  is the cheapest way to run plans on {chainName}.
-                </>
-              )}
-            </span>
-          </p>
+          <CrossChainPremium
+            chainName={chainName}
+            unit={headlineUnit}
+            sameChainAvgUsd={cost.sameChainAvgUsd}
+            crossChainAvgUsd={cost.crossChainAvgUsd}
+          />
           </div>
         </div>
       </div>
@@ -677,7 +750,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
           {
             id: "switching" as const,
             label: `Switch to ${CHAIN_NAMES[selectedChainId] ?? selectedChainId}`,
-            note: "Your wallet needs to be on the network you are funding.",
+            note: "Your wallet has to be on the network you are funding.",
           },
         ]
       : []),
@@ -779,10 +852,10 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                   </p>
                   <p className="gt-hero-note">
                     {isEmpty
-                      ? "Empty — auto-execution needs gas to run your plans."
+                      ? "Empty — plans cannot auto-execute."
                       : isLow
-                        ? `Running low: about ${runsLeft} run${runsLeft === 1 ? "" : "s"} left. Top up before it stops.`
-                        : `Enough for about ${runsLeft > 999 ? "999+" : runsLeft} more scheduled run${runsLeft === 1 ? "" : "s"}.`}
+                        ? `About ${runsLeft} run${runsLeft === 1 ? "" : "s"} left — top up soon.`
+                        : `About ${runsLeft > 999 ? "999+" : runsLeft} more scheduled run${runsLeft === 1 ? "" : "s"}.`}
                   </p>
                 </div>
                 {(isEmpty || isLow) && (
@@ -849,9 +922,8 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
 
               {!hasGasTank ? (
                 <p className="gt-hint gt-hint-warn">
-                  No gas tank is deployed on {CHAIN_NAMES[selectedChainId] ?? "this network"} yet —
-                  the cost above is what a run there would come to. Pick a network with a tank to
-                  top up.
+                  No tank on {CHAIN_NAMES[selectedChainId] ?? "this network"} yet — pick one that
+                  has a tank to top up.
                 </p>
               ) : (
                 <>
@@ -865,12 +937,13 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                       <svg fill="none" stroke="currentColor" strokeWidth="2.1" viewBox="0 0 24 24" aria-hidden>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h13m0 0l-3-3m3 3l-3 3M20 17H7m0 0l3 3m-3-3l3-3" />
                       </svg>
+                      {/* The two networks and an arrow say it; the sentence that used to spell out
+                          why a deposit lands where it signs was the same fact twice. */}
                       <p className="gt-switch-copy">
-                        Your wallet is on{" "}
-                        <b>{walletChainId ? CHAIN_NAMES[walletChainId] ?? `Chain ${walletChainId}` : "another network"}</b>{" "}
-                        — a top-up lands on the network it signs from, so funding{" "}
-                        <b>{CHAIN_NAMES[selectedChainId] ?? `Chain ${selectedChainId}`}</b> needs a
-                        switch.
+                        <b>{walletChainId ? CHAIN_NAMES[walletChainId] ?? `Chain ${walletChainId}` : "another network"}</b>
+                        {" → "}
+                        <b>{CHAIN_NAMES[selectedChainId] ?? `Chain ${selectedChainId}`}</b>
+                        <span>a top-up lands where your wallet signs it</span>
                       </p>
                       <button
                         type="button"
@@ -957,10 +1030,10 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
           <div className="gt-foot">
             <p className="gt-foot-hint">
               {isConnected && hasGasTank && needsSwitch
-                ? `Your wallet switches to ${CHAIN_NAMES[selectedChainId] ?? "that network"} first — it will ask.`
+                ? `Switches to ${CHAIN_NAMES[selectedChainId] ?? "that network"} first.`
                 : needsApproval && amountWei > 0n
-                  ? "Approval and deposit run back to back — your wallet will ask twice."
-                  : "Gas is deducted per run, on whichever network has a balance."}
+                  ? "Two signatures: approve, then deposit."
+                  : "Deducted per run, from whichever network has a balance."}
             </p>
             <button type="button" onClick={onClose} disabled={isBusy} className="ss-btn ss-btn-soft">
               Close
@@ -1011,7 +1084,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                   </span>
                   <div className="min-w-0">
                     <p className="dm-prog-title">Topping up your tank…</p>
-                    <p className="dm-prog-sub">Keep this window open until every step is done.</p>
+                    <p className="dm-prog-sub">Keep this window open until it finishes.</p>
                   </div>
                 </div>
 
@@ -1050,9 +1123,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                   </div>
                 )}
 
-                <p className="dm-prog-foot">
-                  Your wallet may ask you to confirm more than once — that&apos;s each step above.
-                </p>
+                <p className="dm-prog-foot">One wallet prompt per step above.</p>
               </>
             )}
           </div>
