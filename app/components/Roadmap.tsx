@@ -4,36 +4,46 @@ import { Card3D } from "./Card3D";
 const MILESTONES = [
   {
     phase: "Phase 1",
-    timeframe: "0–2 months",
+    timeframe: "Done",
     icon: "🚀",
     theme: "mint" as const,
-    status: "now" as const,
-    statusLabel: "In progress",
-    title: "Beta & reliability",
+    status: "done" as const,
+    statusLabel: "Shipped",
+    title: "Mainnet & reliability",
     goal: "Make execution boring and dependable.",
-    items: ["Auto-executor integration", "50 beta testers, 4 chains", "Gas Tank hardening", "Uptime + failure alerting"],
+    items: [
+      "Contracts live & verified on mainnet",
+      "Relayer executing on mainnet",
+      "Gas charged at cost, from receipts",
+      "Admin holds, gates & network status",
+    ],
   },
   {
     phase: "Phase 2",
-    timeframe: "2–4 months",
+    timeframe: "0–3 months",
     icon: "⚙️",
     theme: "lavender" as const,
-    status: "next" as const,
-    statusLabel: "Up next",
+    status: "now" as const,
+    statusLabel: "In progress",
     title: "Public launch",
-    goal: "Open the doors and start charging.",
-    items: ["1 free auto plan per chain", "Paid extra auto plans", "Dedicated executor per chain", "Execution history dashboard"],
+    goal: "Open the doors and grow the base.",
+    items: [
+      "1 free auto plan per network",
+      "Paid extra auto plans",
+      "Deeper execution history & exports",
+      "Uptime and failure alerting",
+    ],
   },
   {
     phase: "Phase 3",
-    timeframe: "4–8 months",
+    timeframe: "3–8 months",
     icon: "🤝",
     theme: "sky" as const,
-    status: "later" as const,
-    statusLabel: "Planned",
+    status: "next" as const,
+    statusLabel: "Up next",
     title: "Expansion",
     goal: "Be where the users and liquidity already are.",
-    items: ["More high-demand chains", "VIP tiers + gas discounts", "Wallet & DeFi integrations", "Plan templates"],
+    items: ["More high-demand chains", "Membership tiers + gas discounts", "Wallet & DeFi integrations", "Plan templates"],
   },
   {
     phase: "Phase 4",
@@ -57,10 +67,10 @@ export function Roadmap() {
       <div className="relative z-10 mx-auto max-w-6xl px-4">
         <RevealOnScroll>
           <p className="ps-eyebrow mx-auto mb-4">Roadmap</p>
-          <h2 className="section-title mb-4 text-center">From reliable beta to AI &amp; token utility</h2>
+          <h2 className="section-title mb-4 text-center">From live mainnet to AI &amp; token utility</h2>
           <p className="section-title-sub mx-auto mb-12 text-center">
-            Twelve months, four phases. We earn trust with boring reliability first — everything else is built on
-            top of that.
+            Four phases, and the first one is already behind us. Boring reliability came first on purpose —
+            everything after it is built on contracts that are executing today.
           </p>
         </RevealOnScroll>
 

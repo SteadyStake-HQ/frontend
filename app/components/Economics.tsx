@@ -12,6 +12,13 @@ import { useRunCostUsd } from "@/app/hooks/useRunCost";
 const COMPARISON_FEE_RATE = 0.01;
 
 /**
+ * The vault's own swap fee: `feePercentage = 25` against `FEE_PRECISION = 10000` in DCAVault.sol,
+ * taken from each buy before the swap. Not a stand-in — it is read off the deployed contracts, and
+ * it is the only percentage anywhere in the product.
+ */
+const PROTOCOL_FEE_RATE = 0.0025;
+
+/**
  * The three cadences, over the same year.
  *
  * The span is deliberately identical across all three: the point of the comparison below is that
@@ -96,15 +103,21 @@ function Receipt() {
   const stable = getStableSymbol(active);
 
   const capital = plan.amount * plan.runs;
+  const protocolFee = capital * PROTOCOL_FEE_RATE;
+  const reachesToken = capital - protocolFee;
   const gasSpent = plan.runs * run.typicalUsd;
   // What the plan needs banked, sized the way the app itself sizes it: the worst run this network
   // has had, times the run count. The old 3x buffer is gone — see useGasTank.ts.
   const prepay = plan.runs * run.worstUsd;
+  // The whole bill: the vault's 0.25% on what is swapped, plus the gas each run really burned.
+  const ourCost = protocolFee + gasSpent;
   const elsewhere = capital * COMPARISON_FEE_RATE;
-  const gasBarPct = Math.min(Math.max((gasSpent / elsewhere) * 100, 1.5), 100);
+  // The two segments of our bar, both measured against the same 1% baseline the other bar fills.
+  const feeBarPct = Math.min((protocolFee / elsewhere) * 100, 100);
+  const gasBarPct = Math.min(Math.max((gasSpent / elsewhere) * 100, 0.8), 100 - feeBarPct);
   // Only claimed once it rounds to something worth claiming — an expensive chain against a small
   // plan can land under 2x, and "1x cheaper" would be a boast the bars themselves contradict.
-  const ratio = gasSpent > 0 ? Math.round(elsewhere / gasSpent) : 0;
+  const ratio = ourCost > 0 ? Math.round(elsewhere / ourCost) : 0;
   const cheaperBy = ratio >= 2 ? ratio : null;
 
   /**
@@ -179,13 +192,21 @@ function Receipt() {
           <dd>{usd(capital)}</dd>
         </div>
 
+        <div className="ec-line">
+          <dt>
+            Protocol fee
+            <span className="ec-line-note">0.25% of each buy, taken on-chain by the vault</span>
+          </dt>
+          <dd className="ec-cost">{usd(protocolFee)}</dd>
+        </div>
+
         <div className="ec-line ec-line-good">
           <dt>
             Reaches the token
-            <span className="ec-line-note">we never skim your DCA capital</span>
+            <span className="ec-line-note">the rest is swapped and sent back to your vault</span>
           </dt>
           <dd>
-            {usd(capital)} <span className="ec-pct">100%</span>
+            {usd(reachesToken)} <span className="ec-pct">99.75%</span>
           </dd>
         </div>
 
@@ -246,13 +267,21 @@ function Receipt() {
 
         <div className="ec-bar-row">
           <span className="ec-bar-label">SteadyStake</span>
-          <div className="ec-bar-track">
+          {/* Two segments, so the bill is never quoted as one opaque number: the part that follows
+              what you invest, and the part that follows how often it runs. */}
+          <div className="ec-bar-track ec-bar-track-split">
+            <span
+              className="ec-bar ec-bar-fee"
+              title={`0.25% protocol fee — ${usd(protocolFee)}`}
+              style={{ width: pending ? "0%" : `${feeBarPct}%` }}
+            />
             <span
               className="ec-bar ec-bar-good"
+              title={pending ? undefined : `Gas at cost — ${usd(gasSpent)}`}
               style={{ width: pending ? "0%" : `${gasBarPct}%` }}
             />
           </div>
-          <span className="ec-bar-value ec-bar-value-good">{pending ? "—" : usd(gasSpent)}</span>
+          <span className="ec-bar-value ec-bar-value-good">{pending ? "—" : usd(ourCost)}</span>
         </div>
 
         <div className="ec-bar-row">
@@ -263,15 +292,21 @@ function Receipt() {
           <span className="ec-bar-value ec-bar-value-bad">{usd(elsewhere)}</span>
         </div>
 
+        <p className="ec-compare-legend">
+          <span className="ec-legend-key ec-legend-fee" aria-hidden /> 0.25% protocol fee
+          <span className="ec-legend-key ec-legend-gas" aria-hidden /> gas, at cost
+        </p>
+
         <p className="ec-compare-foot">
-          Our cost scales with <strong>executions</strong>, not with how much you invest. A percentage fee does
-          the opposite.
+          One quarter of the percentage, and the rest of the bill scales with{" "}
+          <strong>executions</strong> rather than with how much you invest — at whatever the gas
+          actually cost, never a markup on it.
         </p>
       </div>
 
       <p className="ps-disclaimer">
-        The plan amount is an example — the per-run cost is not, and 1% is a stand-in for typical
-        recurring-buy fees rather than a quote from any venue.
+        The plan amount is an example — the 0.25% fee and the per-run cost are not. 1% is a stand-in
+        for typical recurring-buy fees rather than a quote from any venue.
       </p>
     </div>
   );
@@ -282,17 +317,25 @@ const FLOWS = [
     theme: "mint" as const,
     tag: "Stays yours",
     title: "DCA capital",
-    body: "Sits in your vault and converts into the token you chose. We never take custody and never take a cut of it.",
-    meter: 100,
-    meterLabel: "100% reaches the token",
+    body: "Sits in your own vault and converts into the token you chose. The vault takes 0.25% of each buy on-chain; the rest is swapped and the tokens come straight back to you. We never take custody of any of it.",
+    meter: 99.75,
+    meterLabel: "99.75% reaches the token",
   },
   {
     theme: "peach" as const,
     tag: "Prepaid",
     title: "Gas Tank",
-    body: "One stablecoin balance, shared across every network. Each run deducts the gas the relayer actually burned — billed at cost, never a markup.",
+    body: "One stablecoin balance, pooled across the mainnets you use. Each run deducts the gas the relayer actually burned — billed at cost, never a markup — and whatever the plan does not spend stays withdrawable.",
     meter: 12,
     meterLabel: "Charged at cost, per execution",
+  },
+  {
+    theme: "lavender" as const,
+    tag: "Only if early",
+    title: "Early exit",
+    body: "Cancel while more than half the plan is still unspent and 3% of that remainder is kept. Past the halfway mark it costs nothing — and either way the rest returns to your wallet in the same transaction.",
+    meter: 3,
+    meterLabel: "3% of the remainder, before halfway",
   },
 ] as const;
 
@@ -321,8 +364,8 @@ const VALUE = [
   {
     theme: "peach" as const,
     icon: "💳",
-    title: "Clear path to revenue",
-    body: "Free tier plus paid auto-executed plans, VIP gas discounts, and premium AI strategy assistants.",
+    title: "Revenue from day one",
+    body: "0.25% accrues in the vault on every swap that has already run. Paid auto slots, VIP gas discounts and premium AI assistants layer on top of a base that is live.",
     chip: "Monetization",
   },
 ] as const;
@@ -336,16 +379,18 @@ export function Economics() {
       <div className="relative z-1 mx-auto max-w-6xl px-4">
         <RevealOnScroll>
           <p className="ps-eyebrow mx-auto mb-4">Economics &amp; value</p>
-          <h2 className="section-title mb-4 text-center">You pay for executions. Nothing else.</h2>
+          <h2 className="section-title mb-4 text-center">
+            0.25% per swap, plus gas at cost. That is the whole bill.
+          </h2>
           <p className="section-title-sub mx-auto mb-12 text-center">
-            There are exactly two balances in SteadyStake — and only one of them is a cost. Pick a plan and a
-            network below: the bill is priced from what runs there really cost.
+            No subscription, no spread, no percentage of your balance. Pick a plan and a network
+            below and the receipt is priced from what runs there really cost — not from a rate card.
           </p>
         </RevealOnScroll>
 
-        {/* The two balances */}
+        {/* Where the money goes */}
         <RevealOnScroll className="reveal-stagger">
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-3">
             {FLOWS.map((f) => (
               <div key={f.title} className="reveal-stagger-item">
                 <Card3D>

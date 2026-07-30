@@ -189,7 +189,7 @@ const STEPS = [
       { k: "DCA capital", v: `${STABLE} you want to invest` },
       { k: "Gas Tank", v: `Prepaid ${STABLE} for execution` },
     ],
-    foot: "One Gas Tank balance covers every network.",
+    foot: "Mainnet tanks spend as one balance — and the unspent part is withdrawable.",
   },
   {
     step: 2,
@@ -209,8 +209,8 @@ const STEPS = [
     title: "It runs itself",
     lead: "Auto or manual — your call.",
     rows: [
-      { k: "Auto", v: "Repeats on the interval you selected" },
-      { k: "Manual", v: "You press go when ready" },
+      { k: "Auto", v: "One free slot per network, then it repeats" },
+      { k: "Manual", v: "You press go when the plan comes due" },
     ],
     foot: "Funds stay in your vault until each swap.",
   },
@@ -219,8 +219,8 @@ const STEPS = [
 const GUARANTEES = [
   { icon: "🔒", text: "Non-custodial" },
   { icon: "🎛️", text: "Cancel anytime" },
-  { icon: "⛽", text: "Gas paid up front" },
-  { icon: "🌐", text: "4 live networks" },
+  { icon: "⛽", text: "Gas at cost, prepaid" },
+  { icon: "🌐", text: "5 networks supported" },
 ] as const;
 
 export function HowItWorks() {

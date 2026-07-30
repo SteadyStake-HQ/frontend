@@ -6854,12 +6854,63 @@ a[href] {
   animation: ec-grow 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.4s forwards;
 }
 
+/* Two segments in one track. Flex rather than absolute so the gas sliver
+   always sits flush against the fee block, whatever the ratio is. */
+.ec-bar-track-split {
+  display: flex;
+  align-items: stretch;
+}
+.ec-bar-track-split .ec-bar {
+  border-radius: 0;
+  flex-shrink: 0;
+}
+.ec-bar-track-split .ec-bar:first-child {
+  border-radius: 9999px 0 0 9999px;
+}
+.ec-bar-track-split .ec-bar:last-child {
+  border-radius: 0 9999px 9999px 0;
+}
+
 .ec-bar-good {
   background: var(--hero-primary);
 }
 
+/* The percentage part of the bill: same family as the gas segment, one
+   step down, so the pair reads as one bar split rather than two claims. */
+.ec-bar-fee {
+  background: color-mix(in srgb, var(--hero-primary) 55%, var(--background));
+}
+
 .ec-bar-bad {
   background: linear-gradient(90deg, #f43f5e, #fb7185);
+}
+
+.ec-compare-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  margin-top: 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--hero-muted);
+}
+
+.ec-legend-key {
+  display: inline-block;
+  height: 0.55rem;
+  width: 0.9rem;
+  border-radius: 9999px;
+}
+.ec-legend-key + .ec-legend-key,
+.ec-compare-legend .ec-legend-key:not(:first-child) {
+  margin-left: 0.6rem;
+}
+.ec-legend-fee {
+  background: color-mix(in srgb, var(--hero-primary) 55%, var(--background));
+}
+.ec-legend-gas {
+  background: var(--hero-primary);
 }
 
 .ec-bar-value {
@@ -6928,6 +6979,1015 @@ a[href] {
 }
 
 /* ============================================================
+   Gas Tank (.ge-*)
+   The section is one argument — "one balance, charged at cost" —
+   so the diagram is literally that: five tanks draining into one
+   reservoir, and one run drinking from it. Everything moves on a
+   loop because the thing being drawn runs on a loop.
+   ============================================================ */
+
+/* The diagram is 1000 units wide and does not usefully compress
+   below ~640px, so on narrow screens it scrolls rather than
+   shrinking its own labels into illegibility. */
+.ge-pool-scroll {
+  margin-top: 0.5rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.ge-pool {
+  display: block;
+  width: 100%;
+  min-width: 640px;
+  height: auto;
+  color: var(--hero-primary);
+}
+
+/* --- Per-network tanks --- */
+.ge-tank {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+.reveal-visible .ge-tank {
+  animation: ge-tank-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.ge-tank-bed {
+  fill: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+.ge-tank-liquid {
+  fill: currentColor;
+  opacity: 0.42;
+  transform-box: fill-box;
+  transform-origin: bottom;
+  transform: scaleY(0);
+}
+.reveal-visible .ge-tank-liquid {
+  animation: ge-fill 1.1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.ge-tank-wall {
+  fill: none;
+  stroke: color-mix(in srgb, var(--foreground) 22%, transparent);
+  stroke-width: 1.5;
+}
+
+.ge-tank-mark {
+  opacity: 0.9;
+}
+
+.ge-tank-name {
+  fill: var(--hero-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.ge-feed {
+  fill: none;
+  stroke: color-mix(in srgb, var(--hero-primary) 30%, transparent);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 5;
+}
+
+/* A drop leaving each tank for the pool, staggered so the five
+   networks never fire in unison — the pool fills continuously. */
+.ge-feed-drop {
+  fill: currentColor;
+  opacity: 0;
+}
+.reveal-visible .ge-feed-drop {
+  animation: ge-drop 2.6s ease-in infinite;
+}
+
+/* --- The shared reservoir --- */
+.ge-pool-bed {
+  fill: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+/* Settles short of full: this is a balance with a level, not a progress bar,
+   and it leaves the right-hand label sitting on bed rather than on liquid. */
+.ge-pool-liquid {
+  transform-box: fill-box;
+  transform-origin: left;
+  transform: scaleX(0);
+}
+.reveal-visible .ge-pool-liquid {
+  animation: ge-pool-fill 1.5s cubic-bezier(0.22, 1, 0.36, 1) 0.5s forwards;
+}
+
+/* Light travelling along the surface: the balance is in use, not parked. */
+.ge-pool-sheen {
+  fill: color-mix(in srgb, #fff 42%, transparent);
+  opacity: 0;
+}
+.reveal-visible .ge-pool-sheen {
+  animation: ge-sheen 4.5s ease-in-out 1.6s infinite;
+}
+
+.ge-pool-wall {
+  fill: none;
+  stroke: color-mix(in srgb, var(--hero-primary) 45%, transparent);
+  stroke-width: 1.75;
+}
+
+.ge-pool-label {
+  fill: var(--foreground);
+  font-size: 11.5px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+}
+
+.ge-pool-sub {
+  fill: var(--hero-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* --- One run drawing from the pool --- */
+.ge-draw {
+  fill: none;
+  stroke: color-mix(in srgb, var(--hero-primary) 34%, transparent);
+  stroke-width: 1.6;
+  stroke-dasharray: 3 5;
+}
+
+.ge-draw-drop {
+  fill: currentColor;
+  opacity: 0;
+}
+.reveal-visible .ge-draw-drop {
+  animation: ge-draw-fall 3.2s ease-in infinite;
+}
+
+.ge-run-box {
+  fill: color-mix(in srgb, var(--hero-primary) 11%, transparent);
+  stroke: color-mix(in srgb, var(--hero-primary) 38%, transparent);
+  stroke-width: 1.4;
+}
+.reveal-visible .ge-run-box {
+  animation: ge-charge 3.2s ease-in-out 0.55s infinite;
+}
+
+.ge-run-text {
+  fill: var(--foreground);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ge-pool-foot {
+  margin: 1.1rem auto 0;
+  max-width: 46rem;
+  text-align: center;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--hero-muted);
+}
+.ge-pool-foot em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+/* --- The four rules --- */
+.ge-rule {
+  display: flex;
+  flex-direction: column;
+}
+
+.ge-rule-title {
+  margin-top: 1rem;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.ge-rule-body {
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--hero-muted);
+}
+
+.ge-rule-chip {
+  margin-top: 1rem;
+  align-self: flex-start;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 26%, transparent);
+  background: color-mix(in srgb, var(--card-accent) 9%, transparent);
+  padding: 0.25rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--card-accent);
+}
+
+/* --- The precedence ladder --- */
+.ge-ladder-lead {
+  margin: 0 auto 1.5rem;
+  max-width: 44rem;
+  text-align: center;
+  font-size: 0.92rem;
+  line-height: 1.7;
+  color: var(--hero-muted);
+}
+
+.ge-ladder {
+  display: grid;
+  gap: 1rem;
+}
+
+.ge-rung {
+  position: relative;
+  overflow: hidden;
+}
+
+/* A beam sweeping each rung in turn: the app tries them in order,
+   and the stagger is that order made visible.
+   z-index clears .landing-card-sweet::before, which the shared
+   `.landing-card-sweet > *` rule would otherwise leave it level with. */
+.ge-rung-beam {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 2;
+  width: 3px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--card-accent),
+    transparent
+  );
+  opacity: 0;
+}
+.reveal-visible .ge-rung-beam {
+  animation: ge-beam 2.7s ease-in-out infinite;
+}
+
+.ge-rung-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.ge-rung-rank {
+  display: inline-flex;
+  height: 1.9rem;
+  min-width: 1.9rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--card-accent) 12%, transparent);
+  padding: 0 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: var(--card-accent);
+}
+
+.ge-rung-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.ge-rung-badge {
+  margin-left: auto;
+  border-radius: 9999px;
+  border: 1px dashed color-mix(in srgb, var(--card-accent) 34%, transparent);
+  padding: 0.2rem 0.6rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--card-accent);
+  white-space: nowrap;
+}
+
+.ge-rung-lead {
+  margin-top: 0.7rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--foreground);
+}
+
+.ge-rung-detail {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--hero-muted);
+}
+
+@media (min-width: 900px) {
+  .ge-rung-badge {
+    margin-left: auto;
+  }
+}
+
+@keyframes ge-tank-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ge-fill {
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes ge-pool-fill {
+  to {
+    transform: scaleX(0.66);
+  }
+}
+
+/* Tank -> pool: falls the height of the feed line, fading as it lands. */
+@keyframes ge-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  12% {
+    opacity: 0.85;
+  }
+  70% {
+    opacity: 0.85;
+    transform: translateY(42px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(42px);
+  }
+}
+
+/* Pool -> run. */
+@keyframes ge-draw-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  10% {
+    opacity: 0.9;
+  }
+  55% {
+    opacity: 0.9;
+    transform: translateY(54px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(54px);
+  }
+}
+
+@keyframes ge-sheen {
+  0% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+  10%,
+  60% {
+    opacity: 0.18;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(600px);
+  }
+}
+
+/* The run box brightens at the moment the drop lands on it. */
+@keyframes ge-charge {
+  0%,
+  40%,
+  100% {
+    fill: color-mix(in srgb, var(--hero-primary) 11%, transparent);
+  }
+  55% {
+    fill: color-mix(in srgb, var(--hero-primary) 26%, transparent);
+  }
+}
+
+@keyframes ge-beam {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  18%,
+  40% {
+    opacity: 1;
+  }
+}
+
+/* ============================================================
+   Control & reliability (.rl-*)
+   The timeline is the section's whole thesis: the block of wait a
+   plan owes keeps its width through the held phase while the
+   playhead and the due tick slide under it together, so the freeze
+   on screen is a real stillness rather than a drawn one.
+   ============================================================ */
+
+.rl-stage {
+  border-radius: var(--card-radius);
+  border: 1px solid var(--card-border);
+  background: linear-gradient(180deg, var(--card-bg) 0%, var(--card-bg-2) 100%);
+  box-shadow: inset 0 1px 0 var(--card-hi);
+  padding: 1.6rem 1.4rem 1.4rem;
+}
+
+.rl-stage-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+
+.rl-stage-chip {
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--hero-primary) 28%, transparent);
+  background: color-mix(in srgb, var(--hero-primary) 10%, transparent);
+  padding: 0.2rem 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--hero-primary);
+}
+
+.rl-timeline-scroll {
+  margin-top: 0.75rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.rl-timeline {
+  display: block;
+  width: 100%;
+  min-width: 680px;
+  height: auto;
+  color: var(--hero-primary);
+  --rl-hold: #d97706;
+}
+.dark .rl-timeline {
+  --rl-hold: #fbbf24;
+}
+
+/* --- The plot: one span of time, not three cards --- */
+.rl-plot {
+  fill: color-mix(in srgb, var(--foreground) 3%, transparent);
+  stroke: color-mix(in srgb, var(--foreground) 9%, transparent);
+  stroke-width: 1;
+}
+
+.rl-band {
+  fill: color-mix(in srgb, var(--rl-hold) 10%, transparent);
+  stroke: color-mix(in srgb, var(--rl-hold) 28%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 5 4;
+}
+
+.rl-phase {
+  opacity: 0;
+}
+.reveal-visible .rl-phase {
+  animation: rl-phase-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.rl-phase-label {
+  fill: color-mix(in srgb, var(--foreground) 62%, transparent);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.rl-phase-held .rl-phase-label {
+  fill: var(--rl-hold);
+}
+
+.rl-phase-caption {
+  fill: var(--hero-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* --- Rows --- */
+.rl-row-label {
+  fill: var(--hero-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.rl-row-bed {
+  fill: color-mix(in srgb, var(--foreground) 7%, transparent);
+}
+
+/* Wall clock. Neutral on purpose: time passing is not the news, so
+   the accent stays with the thing that stops. */
+.rl-elapsed {
+  fill: color-mix(in srgb, var(--foreground) 24%, transparent);
+  transform-box: fill-box;
+  transform-origin: left;
+  transform: scaleX(0);
+}
+
+/* --- The wait still owed --- */
+.rl-owed-len {
+  transform-box: fill-box;
+  transform-origin: left;
+  transform: scaleX(1);
+}
+.rl-owed-fill {
+  fill: color-mix(in srgb, var(--hero-primary) 72%, transparent);
+}
+/* Laid over the fill rather than recolouring it, so the block reads as
+   the same block, paused. */
+.rl-owed-held {
+  fill: var(--rl-hold);
+  opacity: 0;
+}
+
+/* Parked where the loop starts, so any frame drawn before the section
+   reveals is still a coherent one. */
+.rl-due {
+  transform: translateX(500px);
+}
+
+.rl-due-line {
+  stroke: color-mix(in srgb, var(--foreground) 32%, transparent);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 4;
+}
+.rl-due-label {
+  fill: var(--hero-muted);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.rl-now-line {
+  stroke: color-mix(in srgb, var(--foreground) 26%, transparent);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.rl-now-dot {
+  fill: color-mix(in srgb, var(--foreground) 62%, transparent);
+  stroke: var(--background);
+  stroke-width: 2;
+}
+
+/* --- Chips, each visible only through its own phase --- */
+.rl-chip,
+.rl-fire {
+  opacity: 0;
+}
+
+.rl-chip-box {
+  fill: var(--background);
+  stroke-width: 1.2;
+}
+.rl-chip-text {
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.rl-chip-held .rl-chip-box {
+  fill: color-mix(in srgb, var(--rl-hold) 16%, var(--background));
+  stroke: color-mix(in srgb, var(--rl-hold) 42%, transparent);
+}
+.rl-chip-held .rl-chip-text {
+  fill: var(--rl-hold);
+}
+
+.rl-chip-resumed .rl-chip-box {
+  fill: color-mix(in srgb, var(--hero-primary) 13%, var(--background));
+  stroke: color-mix(in srgb, var(--hero-primary) 38%, transparent);
+}
+.rl-chip-resumed .rl-chip-text {
+  fill: var(--hero-primary);
+}
+
+.rl-fire-ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  opacity: 0.5;
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0.5);
+}
+.rl-fire-core {
+  fill: currentColor;
+}
+.rl-fire-text {
+  fill: var(--hero-primary);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+/* One loop drives every moving part, so they are all describing the
+   same event. `.rl-anim` fades the whole layer out just before the
+   loop restarts and back in just after, which is what keeps the
+   repeat from reading as a snap back to the start. */
+.reveal-visible .rl-anim {
+  animation: rl-veil 12s linear infinite;
+}
+.reveal-visible .rl-elapsed {
+  animation: rl-elapsed 12s linear infinite;
+}
+.reveal-visible .rl-owed,
+.reveal-visible .rl-now {
+  animation: rl-travel 12s linear infinite;
+}
+.reveal-visible .rl-owed-len {
+  animation: rl-owed 12s linear infinite;
+}
+.reveal-visible .rl-owed-held {
+  animation: rl-owed 12s linear infinite, rl-held-tint 12s ease-in-out infinite;
+}
+.reveal-visible .rl-due {
+  animation: rl-due 12s linear infinite;
+}
+.reveal-visible .rl-chip-held {
+  animation: rl-chip-held 12s ease-in-out infinite;
+}
+.reveal-visible .rl-chip-resumed {
+  animation: rl-chip-resumed 12s ease-in-out infinite;
+}
+.reveal-visible .rl-fire {
+  animation: rl-fire 12s ease-in-out infinite;
+}
+.reveal-visible .rl-fire-ring {
+  animation: rl-fire-ring 12s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+/* --- Guard cards --- */
+.rl-guard {
+  display: flex;
+  flex-direction: column;
+}
+
+.rl-guard-title {
+  margin-top: 1rem;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.rl-guard-body {
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--hero-muted);
+}
+
+.rl-guard-chip {
+  margin-top: 1rem;
+  align-self: flex-start;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 26%, transparent);
+  background: color-mix(in srgb, var(--card-accent) 9%, transparent);
+  padding: 0.25rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--card-accent);
+}
+
+/* --- Auto vs manual --- */
+.rl-mode {
+  --mode-accent: var(--hero-primary);
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--card-radius);
+  border: 1px solid color-mix(in srgb, var(--mode-accent) 26%, var(--card-border));
+  background: linear-gradient(180deg, var(--card-bg) 0%, var(--card-bg-2) 100%);
+  box-shadow: inset 0 1px 0 var(--card-hi);
+  padding: 1.35rem;
+}
+.rl-mode-manual {
+  --mode-accent: var(--hero-secondary, #7c5cf5);
+}
+
+.rl-mode-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.rl-mode-label {
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+
+.rl-mode-tag {
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--mode-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--mode-accent) 10%, transparent);
+  padding: 0.2rem 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--mode-accent);
+}
+
+.rl-mode-body {
+  margin-top: 0.7rem;
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: var(--hero-muted);
+}
+
+/* Four beats. Auto runs them as a travelling wave (the sweep);
+   manual lights one at a time on a longer beat (you, deciding). */
+.rl-mode-pulse {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 1.1rem;
+}
+.rl-mode-pulse span {
+  height: 0.3rem;
+  flex: 1;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--mode-accent) 18%, transparent);
+}
+.reveal-visible .rl-mode-auto .rl-mode-pulse span {
+  animation: rl-beat 1.8s ease-in-out infinite;
+}
+.reveal-visible .rl-mode-manual .rl-mode-pulse span {
+  animation: rl-beat 4.4s ease-in-out infinite;
+}
+.rl-mode-pulse span:nth-child(1) {
+  animation-delay: 0s;
+}
+.rl-mode-pulse span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.rl-mode-pulse span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+.rl-mode-pulse span:nth-child(4) {
+  animation-delay: 0.48s;
+}
+
+@keyframes rl-phase-in {
+  to {
+    opacity: 1;
+  }
+}
+
+/*
+ * The loop. The playhead crosses the axis over 0%–78% and the story
+ * closes there; 78%–94% is the beat that lets the buy land and be
+ * read, and the last 6% is the seam, hidden by `rl-veil`.
+ *
+ * Phase boundaries follow from that: the hold lands 3/10 along the
+ * axis (0.3 × 78% = 23.4%) and lifts at 19/30 (0.6333 × 78% = 49.4%).
+ * Those two stops also make the drain rate either side of the hold
+ * identical to four decimal places, so the pause reads as a pause and
+ * not as a change of pace.
+ */
+@keyframes rl-veil {
+  0% {
+    opacity: 0;
+  }
+  3.5%,
+  94% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Now, and the block hanging off it. Neither ever pauses — a hold
+   does not stop the clock, it stops the spending. */
+@keyframes rl-travel {
+  0% {
+    transform: translateX(0);
+  }
+  78%,
+  100% {
+    transform: translateX(750px);
+  }
+}
+
+@keyframes rl-elapsed {
+  0% {
+    transform: scaleX(0);
+  }
+  78%,
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+/*
+ * The freeze, literally: 23.4%–49.4% repeat one width, so for a
+ * quarter of the loop the wait owed does not shrink while the
+ * playhead under it keeps moving.
+ */
+@keyframes rl-owed {
+  0% {
+    transform: scaleX(1);
+  }
+  23.4% {
+    transform: scaleX(0.55);
+  }
+  49.4% {
+    transform: scaleX(0.55);
+  }
+  78%,
+  100% {
+    transform: scaleX(0);
+  }
+}
+
+/* The due moment: fixed while the plan runs, pushed back by exactly
+   the length of the hold, fixed again once it resumes. */
+@keyframes rl-due {
+  0%,
+  23.4% {
+    transform: translateX(500px);
+  }
+  49.4%,
+  100% {
+    transform: translateX(750px);
+  }
+}
+
+@keyframes rl-held-tint {
+  0%,
+  23.4% {
+    opacity: 0;
+  }
+  27%,
+  46% {
+    opacity: 0.85;
+  }
+  49.4%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes rl-chip-held {
+  0%,
+  23.4% {
+    opacity: 0;
+  }
+  27%,
+  46% {
+    opacity: 1;
+  }
+  49.4%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes rl-chip-resumed {
+  0%,
+  50% {
+    opacity: 0;
+  }
+  54%,
+  71% {
+    opacity: 1;
+  }
+  75%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes rl-fire {
+  0%,
+  77% {
+    opacity: 0;
+  }
+  81%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes rl-fire-ring {
+  0%,
+  78% {
+    transform: scale(0.5);
+  }
+  94%,
+  100% {
+    transform: scale(1.2);
+  }
+}
+
+@keyframes rl-beat {
+  0%,
+  70%,
+  100% {
+    background: color-mix(in srgb, var(--mode-accent) 18%, transparent);
+  }
+  22% {
+    background: var(--mode-accent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ge-tank,
+  .rl-phase {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
+  /* The tanks and the pool keep their levels; only the fill gesture goes.
+     Each is posed at the value its animation settles on, not at the
+     untransformed one — an untransformed pool would read as 100% full. */
+  .ge-tank-liquid {
+    animation: none !important;
+    transform: none !important;
+  }
+  .ge-pool-liquid {
+    animation: none !important;
+    transform: scaleX(0.66);
+  }
+  .ge-feed-drop,
+  .ge-draw-drop,
+  .ge-pool-sheen,
+  .ge-run-box,
+  .ge-rung-beam,
+  .rl-mode-pulse span {
+    animation: none !important;
+  }
+  /* The beam only means anything while it is travelling the rungs in
+     order — three static ones say nothing, so it goes entirely. */
+  .ge-rung-beam {
+    opacity: 0;
+  }
+  /*
+   * With nothing moving, the timeline is posed mid-hold: the playhead
+   * inside the held window, the wait owed still at the width it was
+   * carrying, the due tick already pushed past where the plan would
+   * have fired, and only the frozen chip on screen. Showing both
+   * chips at once would have them contradict each other.
+   */
+  .rl-anim,
+  .rl-elapsed,
+  .rl-owed,
+  .rl-owed-len,
+  .rl-owed-held,
+  .rl-due,
+  .rl-now,
+  .rl-chip-held,
+  .rl-chip-resumed,
+  .rl-fire,
+  .rl-fire-ring {
+    animation: none !important;
+  }
+  .rl-anim {
+    opacity: 1;
+  }
+  .rl-elapsed {
+    transform: scaleX(0.467);
+  }
+  .rl-owed,
+  .rl-now {
+    transform: translateX(350px);
+  }
+  .rl-owed-len {
+    transform: scaleX(0.55);
+  }
+  .rl-owed-held {
+    opacity: 0.85;
+  }
+  .rl-due {
+    transform: translateX(625px);
+  }
+  .rl-chip-held {
+    opacity: 1;
+  }
+  .rl-chip-resumed,
+  .rl-fire {
+    opacity: 0;
+  }
+}
+
+/* ============================================================
    Roadmap — timeline rail
    ============================================================ */
 
@@ -6936,11 +7996,26 @@ a[href] {
   height: 1.5rem;
   color: var(--hero-muted);
 }
+/* A shipped phase is drawn solid and complete, so the rail reads as a
+   distance already covered rather than one more thing on the list. */
+.rm-rail-done {
+  color: #0d9488;
+}
+.dark .rm-rail-done {
+  color: #2dd4bf;
+}
 .rm-rail-now {
   color: var(--hero-primary);
 }
 .rm-rail-next {
   color: var(--hero-secondary);
+}
+
+.rm-rail-done .rm-rail-line {
+  opacity: 0.6;
+}
+.rm-rail-done .rm-rail-dot {
+  background: currentColor;
 }
 
 .rm-rail-line {
@@ -6997,6 +8072,12 @@ a[href] {
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--hero-muted);
+}
+.rm-status-done {
+  color: #0d9488;
+}
+.dark .rm-status-done {
+  color: #2dd4bf;
 }
 .rm-status-now {
   color: var(--hero-primary);

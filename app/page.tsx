@@ -4,7 +4,9 @@ import HeroSection from "./components/Hero";
 import { ProblemSolution } from "./components/ProblemSolution";
 import { WhyBase } from "./components/WhyBase";
 import { HowItWorks } from "./components/HowItWorks";
+import { GasEngine } from "./components/GasEngine";
 import { Economics } from "./components/Economics";
+import { Reliability } from "./components/Reliability";
 import { Roadmap } from "./components/Roadmap";
 import { Vision } from "./components/Vision";
 import { Footer } from "./components/Footer";
@@ -27,7 +29,9 @@ export default function Home() {
           <ProblemSolution />
           <WhyBase />
           <HowItWorks />
+          <GasEngine />
           <Economics />
+          <Reliability />
           <Roadmap />
           <Vision />
           <Footer />

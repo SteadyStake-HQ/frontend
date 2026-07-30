@@ -152,7 +152,7 @@ const PAIRS = [
     },
     solution: {
       title: "Prepaid Gas Tank",
-      body: "Top up a Gas Tank per network with a configurable gas unit. Execution is funded up front, so you know what the automation costs before it runs.",
+      body: "Fund one stablecoin balance up front and every run draws from it — charged the gas it actually burned, at cost. You can price a whole year of automation before you start, and take back whatever it doesn't spend.",
     },
     graphic: "gas" as const,
   },
@@ -315,8 +315,8 @@ export function ProblemSolution() {
           </div>
 
           <p className="mt-8 text-center text-sm font-medium text-[var(--hero-primary)]">
-            Core differentiator: prepaid gas model and reliable auto-execution — so you know exactly what
-            automation costs.
+            Core differentiator: gas prepaid and charged at cost, plus auto-execution you can audit — so
+            you know exactly what the automation costs before it runs, and exactly what it cost after.
           </p>
         </RevealOnScroll>
       </div>
