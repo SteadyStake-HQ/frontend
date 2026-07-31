@@ -5,7 +5,8 @@ import { getBalance, multicall, readContract } from "@wagmi/core";
 import { formatUnits } from "viem";
 import { config } from "@/config/wagmi";
 import { DCA_VAULT_ABI } from "@/config/abis";
-import { getContracts, getStableDecimals, getTokenList } from "@/config/contracts";
+import { getContracts, getStableDecimals } from "@/config/contracts";
+import type { TokenListResponse } from "@/app/api/tokens/route";
 import { DCA_FREQUENCY_INTERVALS, derivePlanRuns } from "@/app/hooks/useDCAHelpers";
 import { REVERSE_FREQUENCY_MAP } from "@/lib/constants";
 import { getTokenLogoUrl } from "@/lib/token-logo";
@@ -204,12 +205,31 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
           };
         })
         .catch(() => null);
+
+      /**
+       * The operator's token list, used only to put a symbol and logo on a plan's target token.
+       *
+       * A miss is expected and harmless: a plan can hold a token the operator has since removed
+       * from the list, and the card falls back to the shortened address exactly as it always did
+       * for an unrecognised token. So this is fetched alongside the reads and never awaited on its
+       * own — a slow or unreachable list costs labels, not the dashboard.
+       */
+      const tokenListPromise = fetch(`/api/tokens?chainId=${encodeURIComponent(chainId)}`, {
+        headers: { accept: "application/json" },
+      })
+        .then(async (response) => {
+          if (!response.ok) return null;
+          return (await response.json()) as TokenListResponse;
+        })
+        .catch(() => null);
+
       const [
         usdcBalanceResult,
         scheduleCountResult,
         activeSchedulesResult,
         enrolledCountResult,
         timingSnapshot,
+        tokenListSnapshot,
       ] = await Promise.all([
           getBalance(config, {
             address: address as `0x${string}`,
@@ -238,6 +258,7 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
             chainId: supportedChainId,
           }),
           timingPromise,
+          tokenListPromise,
         ]);
 
       const scheduleCount =
@@ -286,7 +307,8 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
             })
           : [];
 
-      const tokenList = getTokenList(chainId);
+      const tokenList =
+        tokenListSnapshot?.source === "backend" ? tokenListSnapshot.tokens : [];
       const timingByScheduleId = new Map(
         timingSnapshot?.plans?.map((plan) => [plan.scheduleId, plan]) ?? [],
       );
@@ -341,7 +363,7 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
           const tokenLogo = getTokenLogoUrl(
             chainId,
             String(authoritativeSchedule.targetToken),
-            matchedToken?.logo,
+            matchedToken?.logoUrl ?? undefined,
           );
 
           const frequencyNum = Number(authoritativeSchedule.frequency);

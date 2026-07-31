@@ -271,7 +271,11 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
    * able to cancel and withdraw — but it takes no new ones.
    */
   const allocation = useNetworkAllocation();
-  const { tokens: tokensList, isLoading: isLoadingTokens } = useSupportedTokens(chainId);
+  const {
+    tokens: tokensList,
+    isLoading: isLoadingTokens,
+    isUnavailable: isTokenListUnavailable,
+  } = useSupportedTokens(chainId);
   const [token, setToken] = useState<string>("");
   const [amountPerInterval, setAmountPerInterval] = useState("");
   const [runCount, setRunCount] = useState("");
@@ -1269,7 +1273,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                       )}
                     </div>
 
-                    {isLoadingTokens && tokensList.length === 0 ? (
+                    {isLoadingTokens && allTokenOptions.length === 0 ? (
                       <div className="dm-token-btn">
                         <span className="dm-hint">Loading tokens…</span>
                       </div>
@@ -1298,6 +1302,17 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                           </button>
                         </div>
                         {addTokenError && <p className="dm-hint dm-hint-error">{addTokenError}</p>}
+                        {/* The token list has one source — the backend. When it has nothing to
+                            offer, say which of the two reasons it is rather than showing an empty
+                            dropdown with no explanation. Pasting an address still works either way:
+                            that path reads the contract directly. */}
+                        {!isLoadingTokens && allTokenOptions.length === 0 && (
+                          <p className="dm-hint">
+                            {isTokenListUnavailable
+                              ? "The token list can't be reached right now. You can still paste a token address above."
+                              : "No tokens are listed for this network yet. You can paste a token address above."}
+                          </p>
+                        )}
                       </>
                     )}
                   </div>

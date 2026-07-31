@@ -6,8 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "fetch-trending-tokens": "node scripts/fetch-trending-tokens.mjs"
+    "lint": "eslint"
   },
   "dependencies": {
     "@gelatonetwork/relay-sdk": "^5.7.0",
