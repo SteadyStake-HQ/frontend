@@ -275,25 +275,39 @@ function RunCostExplainer({ chainId }: { chainId: number }) {
 
   /**
    * The headline: what the next run on this network will cost, at this minute's gas price and
-   * token price. Null means it cannot be read at all and the section has nothing to say.
+   * token price.
+   *
+   * Where those cannot be read — an RPC we cannot reach, a token no feed prices — it falls back to
+   * the average of what runs here have really been charged. That is a different claim and is
+   * labelled as one, but it is a true and useful number, and the section used to unmount itself
+   * entirely rather than show it: a network with a thousand runs on record would go blank because
+   * one price feed was briefly unavailable.
    */
-  const headline = liveUsd != null ? formatRunCostUsd(liveUsd) : null;
+  const isEstimate = liveUsd != null;
+  const headlineUsd = liveUsd ?? cost.avgUsd;
+  const headline = headlineUsd != null ? formatRunCostUsd(headlineUsd) : null;
   /**
    * A charge is denominated in the token the tank holds; an estimate for a network with no tank is
    * not denominated in anything. Quoting the latter in USDC would imply a tank exists to hold it.
    */
   const headlineUnit = hasGasTank ? stable : POOLED_SYMBOL;
-  const headlineFrom = hasGasTank
-    ? "charged as spent · estimate"
-    : `estimated live · no tank on ${chainName} yet`;
+  const headlineFrom = !isEstimate
+    ? `measured · ${cost.samples.toLocaleString("en-US")} run${cost.samples === 1 ? "" : "s"} on record`
+    : hasGasTank
+      ? "charged as spent · estimate"
+      : `estimated live · no tank on ${chainName} yet`;
 
-  /** The window the range below is drawn from — the relayer keeps the last thousand per network. */
-  const runsLabel = `last ${cost.samples.toLocaleString("en-US")} run${cost.samples === 1 ? "" : "s"}`;
-  /** The same window said as a phrase, for the tips — "the last 1 run" does not read as English. */
+  /**
+   * The record the range below is drawn from: every execution ever saved on this network, for
+   * every user. It used to be the last thousand the running relayer process happened to have
+   * watched, which after any redeploy was none of them.
+   */
+  const runsLabel = `${cost.samples.toLocaleString("en-US")} run${cost.samples === 1 ? "" : "s"} on record`;
+  /** The same said as a phrase, for the tips — "all the 1 runs" does not read as English. */
   const windowLabel =
     cost.samples === 1
-      ? "the one run recorded"
-      : `the last ${cost.samples.toLocaleString("en-US")} runs`;
+      ? "the one run on record"
+      : `all ${cost.samples.toLocaleString("en-US")} runs on record`;
 
   if (headline == null) {
     /*
@@ -316,8 +330,8 @@ function RunCostExplainer({ chainId }: { chainId: number }) {
         </section>
       );
     }
-    // Nothing charges a run here and nothing will quote one either. Say nothing rather than
-    // showing a breakdown of blanks under this network's name.
+    // Nothing charges a run here, nothing has ever run here, and nothing will quote one either.
+    // Say nothing rather than showing a breakdown of blanks under this network's name.
     return null;
   }
 
@@ -336,11 +350,13 @@ function RunCostExplainer({ chainId }: { chainId: number }) {
           {/*
             The panel is collapsed by default, so anything that only appears once it is open will
             be missed by most people. This figure moves — it is gas priced this minute, not a rate
-            — and has to say so where the figure is, not only inside the panel.
+            — and has to say so where the figure is, not only inside the panel. When the live
+            inputs cannot be read the headline is the measured average instead, and the tag has to
+            change with it rather than label a record as an estimate.
           */}
           <span className="gt-why-tag">
             <span className="gt-why-tag-dot" aria-hidden />
-            live estimate
+            {isEstimate ? "live estimate" : "measured average"}
           </span>
         </span>
         <span className="gt-why-price">
@@ -357,11 +373,16 @@ function RunCostExplainer({ chainId }: { chainId: number }) {
         so each says what it is *for* rather than leaving the reader to infer it. Two short cells
         and a tag apiece; the sentence-length version of the same point lives on the hover tip.
       */}
-      {cost.avgUsd != null && cost.maxUsd != null && (
+      {/*
+        Gated on the sample count rather than on both figures being non-null. One charged run gives
+        an average and a maximum that are the same number, and showing them is right: "one run, it
+        cost this" is a fact, and the block used to vanish whenever either half was missing.
+      */}
+      {cost.samples > 0 && cost.avgUsd != null && (
         <div className="gt-why-range">
           <span
             className="gt-why-stat is-avg"
-            title={`The mean of ${windowLabel} on ${chainName}. Your runs-left count is your tank balance divided by this.`}
+            title={`The mean of ${windowLabel} on ${chainName} — every plan on the network, not just yours. Your runs-left count is your tank balance divided by this.`}
           >
             <em>Average run</em>
             <b>
@@ -375,12 +396,12 @@ function RunCostExplainer({ chainId }: { chainId: number }) {
           >
             <em>Most expensive</em>
             <b>
-              {formatRunCostUsd(cost.maxUsd)} <small>{headlineUnit}</small>
+              {formatRunCostUsd(cost.maxUsd ?? cost.avgUsd)} <small>{headlineUnit}</small>
             </b>
             <span className="gt-why-stat-tag">size a prepay on this</span>
           </span>
           <span className="gt-why-range-note">
-            {runsLabel} · {chainName}
+            {runsLabel} · {chainName} · all plans
           </span>
         </div>
       )}
@@ -394,8 +415,17 @@ function RunCostExplainer({ chainId }: { chainId: number }) {
         <div className="gt-why-panel">
           <div className="gt-why-inner" inert={!open}>
           <dl className="gt-why-rows">
+            {/*
+              The native side of the estimate, and the figure the row below is the dollar value
+              of — so the two multiply out on screen. It carries the deduction leg's headroom
+              because the charge does: the relayer reads the swap's cost off its receipt but has
+              to price the deduction before sending it, and bills that half a little wide so it is
+              never the one out of pocket. The tip says so rather than a line of prose.
+            */}
             <div className="gt-why-row">
-              <dt>
+              <dt
+                title={`Gas for both transactions of a run at ${chainName}'s current gas price. The deduction leg is priced ahead of itself, with headroom, because the amount it debits has to be chosen before it is sent.`}
+              >
                 Network fee <span>2 txs · {chainName}</span>
               </dt>
               <dd>

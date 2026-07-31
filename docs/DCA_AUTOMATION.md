@@ -88,11 +88,22 @@ Balances are pooled, so a run on one network can be settled from another network
 is, the deduction runs on the paying network at that network's gas price, in that network's token
 — which is why a cross-network run costs more, and why the app says so before it happens.
 
-Every completed run reports back to `gas-profile.ts`, which keeps the last **1,000** per chain:
-the gas, for pricing the next run's deduction leg, and the charge, for the average and worst-case
-figures the gas tank modal publishes. The app reads both through `/api/gas-profile`
-(`useRunGasProfile` → `useEstimatedRunCostUsdc6`); a run's cost reaches it within ~5 minutes of
-caching.
+Every completed run is saved to `run_history`, and **every one of them** — all plans, all users, no
+window — is what the per-chain figures are aggregated from (`backend/src/run-cost-history.ts`,
+merged into the profile by `gas-profile.ts`): the gas, for pricing the next run's deduction leg and
+for the live estimate, and the charge, for the average and worst-case figures the gas tank modal
+publishes. The app reads them through `/api/gas-profile` (`useRunGasProfile` →
+`useEstimatedRunCostUsdc6`); a run's cost reaches it within ~5 minutes of caching.
+
+`gas-profile.ts` still keeps its own samples in a local JSON file, but only as the fallback for a
+deployment with no database. That file is process-local, so on a host that redeploys it is empty —
+which is why the modal's average and maximum used to be missing entirely, and why the live estimate
+beside them was multiplying a build-time seed instead of measured gas.
+
+The estimate reproduces the charge rather than approximating it: `swapGasUnits + recordGasUnits ×
+recordBufferBps/10000`, at the chain's gas price and its token's USD price. Leaving the deduction
+leg's 20% headroom out of it quotes under what the tank will actually be debited, so
+`/api/gas-profile` publishes the two legs and the buffer separately for callers to apply.
 
 The GasTank's own `gasCostPerExecutionUsdc6` still exists on chain and nothing reads it —
 `recordExecution` debits whatever the relayer passes, which is the receipt's cost.

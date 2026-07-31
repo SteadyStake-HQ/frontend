@@ -200,7 +200,7 @@ const LADDER = [
     title: "Measured",
     lead: "The average of what real runs on that network actually cost.",
     detail:
-      "Every completed run reports its receipt back. The last 1,000 per network stay on file, so the quote is a record, not a guess — and the range they landed in is shown with it.",
+      "Every completed run reports its receipt back, and every one of them is kept — all plans, all networks, no window. The quote is a record, not a guess, and the range they landed in is shown with it.",
     badge: "measured · N runs",
   },
   {

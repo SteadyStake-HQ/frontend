@@ -18,8 +18,13 @@ import { getGasCostPerRunUsd, getSeedGasUnitsPerRun } from "@/config/gas-cost-en
  * This is also what the tank is charged. There is no flat rate any longer: the relayer debits the
  * gas a run actually burned (backend/src/run-executor.ts), so the figure here is not an
  * explanation of someone's price — it is the price, as far ahead of the run as it can be known.
- * Which is why /api/gas-profile also carries what recent runs were charged: an estimate of a
- * variable cost is worth little without the range the last runs landed in.
+ * Which is why /api/gas-profile also carries what runs were charged: an estimate of a variable
+ * cost is worth little without the range the real ones landed in.
+ *
+ * Both halves are drawn from the whole execution record — every run ever saved on that network,
+ * for every user, with no window (backend/src/run-cost-history.ts). That is what an average is
+ * supposed to mean, and it is also what makes the estimate right: quoting it against a build-time
+ * seed put it roughly a third under the charges the ledger was recording on BNB Chain.
  */
 
 /**
@@ -59,12 +64,23 @@ export function useNativePriceUsd(chainId: number | undefined): {
 export type GasUnitsSource = "measured" | "seed";
 
 /**
- * What the last runs on a network were charged, in dollars.
+ * Which record the measured figures were drawn from.
  *
- * The window is the last 1,000 runs the relayer settled on that chain. `avgUsd` is what a run
- * typically costs there and `maxUsd` the worst one in that window — both published because the
- * charge follows gas, and a range is the honest form of a number that moves. Null throughout
- * until a chain has run at least once.
+ * "history" is the durable one — every execution ever saved on that network, for every user, with
+ * no window. "relayer" is the running backend process's own samples, which is all there is when no
+ * database is configured and which starts empty after every redeploy. "seed" means nothing has run
+ * there yet. Worth distinguishing because only the first is a claim about the network rather than
+ * about whatever the current process happened to watch.
+ */
+export type RunCostBasis = "history" | "relayer" | "seed";
+
+/**
+ * What runs on a network were charged, in dollars.
+ *
+ * Drawn from every recorded execution on that chain — every user, no window — so `avgUsd` is what
+ * a run there typically costs and `maxUsd` the worst one on record. Both published because the
+ * charge follows gas, and a range is the honest form of a number that moves. Null throughout until
+ * a chain has run at least once.
  */
 export interface RunCostStats {
   samples: number;
@@ -72,7 +88,7 @@ export interface RunCostStats {
   maxUsd: number | null;
   minUsd: number | null;
   lastUsd: number | null;
-  /** Runs in the window paid out of another network's tank — the ones that cost the premium. */
+  /** Runs paid out of another network's tank — the ones that cost the premium. */
   crossChainSamples: number;
   crossChainAvgUsd: number | null;
   sameChainAvgUsd: number | null;
@@ -90,14 +106,33 @@ const NO_COST_STATS: RunCostStats = {
 };
 
 /**
- * A chain's measured profile: the gas one run burns, and what recent runs were charged. Falls back
- * to that chain's seed gas whenever the backend has nothing to say, so the gas figure never
- * resolves to null and the modal always has a number to multiply; the cost statistics do go empty,
- * because inventing a history of charges that never happened is a different thing entirely.
+ * The relayer's headroom on the deduction leg, assumed when the backend does not state it. Kept in
+ * step with RECORD_BUFFER_BPS in backend/src/gas-profile.ts.
+ */
+const DEFAULT_RECORD_BUFFER_BPS = 12000;
+
+/**
+ * A chain's measured profile: the gas one run burns, leg by leg, and what runs there were charged.
+ *
+ * Falls back to that chain's seed gas whenever the backend has nothing to say, so the gas figure
+ * never resolves to null and the modal always has a number to multiply; the cost statistics do go
+ * empty, because inventing a history of charges that never happened is a different thing entirely.
+ *
+ * The two legs come back separately because the relayer does not charge for them the same way. The
+ * swap is billed at exactly what its receipt records. The deduction that follows cannot be — the
+ * amount it debits is an argument to it, so it has to be priced before it is sent — and is billed
+ * at its measured gas widened by `recordBufferBps`. An estimate built from the two-leg total alone
+ * leaves that headroom out and comes in under the real charge every time.
  */
 export function useRunGasProfile(chainId: number | undefined): {
+  /** Gas both transactions burn — what a run costs the relayer. */
   gasUnits: bigint;
+  /** Gas the run is *billed* for: the swap leg plus the deduction leg with its headroom on top. */
+  chargeableGasUnits: bigint;
+  /** The busy-day figure, where the record has enough runs to have one. */
+  gasUnitsP90: bigint | null;
   source: GasUnitsSource;
+  basis: RunCostBasis;
   samples: number;
   cost: RunCostStats;
 } {
@@ -114,8 +149,13 @@ export function useRunGasProfile(chainId: number | undefined): {
       if (!res.ok) return null;
       return (await res.json()) as {
         gasUnitsPerRun?: number;
+        swapGasUnits?: number | null;
+        recordGasUnits?: number | null;
+        recordBufferBps?: number;
+        gasUnitsP90?: number | null;
         samples?: number;
         source?: GasUnitsSource;
+        basis?: RunCostBasis;
         cost?: Partial<RunCostStats>;
       };
     },
@@ -123,15 +163,41 @@ export function useRunGasProfile(chainId: number | undefined): {
 
   const cost: RunCostStats = { ...NO_COST_STATS, ...(data?.cost ?? {}) };
   const units = data?.gasUnitsPerRun;
-  if (typeof units === "number" && Number.isFinite(units) && units > 0) {
-    return {
-      gasUnits: BigInt(Math.round(units)),
-      source: data?.source === "measured" ? "measured" : "seed",
-      samples: data?.samples ?? 0,
-      cost,
-    };
-  }
-  return { gasUnits: getSeedGasUnitsPerRun(chainId), source: "seed", samples: 0, cost };
+  const measured = typeof units === "number" && Number.isFinite(units) && units > 0;
+  const gasUnits = measured ? BigInt(Math.round(units!)) : getSeedGasUnitsPerRun(chainId);
+
+  /*
+   * The billed figure. Both legs have to be known separately to build it: with only the total, the
+   * split between them is unknown and the headroom cannot be applied to the right half. Where the
+   * record has not yet measured the legs apart, the total stands in unwidened — an estimate a
+   * little under is better than one inflated by a buffer applied to gas it does not belong to.
+   */
+  const swap = positive(data?.swapGasUnits);
+  const record = positive(data?.recordGasUnits);
+  const bufferBps =
+    typeof data?.recordBufferBps === "number" && data.recordBufferBps > 0
+      ? data.recordBufferBps
+      : DEFAULT_RECORD_BUFFER_BPS;
+  const chargeableGasUnits =
+    swap != null && record != null
+      ? BigInt(Math.round(swap + (record * bufferBps) / 10000))
+      : gasUnits;
+
+  const p90 = positive(data?.gasUnitsP90);
+
+  return {
+    gasUnits,
+    chargeableGasUnits,
+    gasUnitsP90: p90 != null ? BigInt(Math.round(p90)) : null,
+    source: measured && data?.source === "measured" ? "measured" : "seed",
+    basis: data?.basis ?? "seed",
+    samples: data?.samples ?? 0,
+    cost,
+  };
+}
+
+function positive(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 export interface RunCostBreakdown {
@@ -139,25 +205,48 @@ export interface RunCostBreakdown {
   gasPriceWei: bigint | null;
   /** Gas price in gwei, for display. */
   gasPriceGwei: number | null;
-  /** Native token spent per run: gas price × the gas both transactions burn. */
+  /**
+   * Native token per run, as the tank is billed for it: gas price × `chargeableGasUnits`. This is
+   * the figure `liveUsd` is the dollar value of, so the two rows multiply out on screen.
+   */
   feeNative: number | null;
+  /** Native the two transactions actually burn, without the deduction leg's headroom. */
+  burnNative: number | null;
   /** USD price of the native token, where one is available. */
   nativeUsd: number | null;
   /** Which feed that price came from — a market quote and a configured one are not the same claim. */
   nativeSource: PriceSource;
-  /** Gas both transactions burn, measured from real runs where the relayer has any. */
+  /** Gas both transactions burn, measured from real runs where there are any on record. */
   gasUnits: bigint;
+  /** Gas the run is billed for — the swap leg plus the deduction leg with its headroom. */
+  chargeableGasUnits: bigint;
+  /** The busy-day gas figure, where the record has enough runs to have one. */
+  gasUnitsP90: bigint | null;
   /** Whether those units are measured or still the seed. */
   gasUnitsSource: GasUnitsSource;
+  /** Which record they were measured from. */
+  basis: RunCostBasis;
   /** How many runs the measured figure is drawn from. 0 while seeded. */
   gasUnitsSamples: number;
   /** What a run costs right now, in USD — and so what the tank will be charged for the next one. */
   liveUsd: number | null;
-  /** What the last runs on this network really cost, for the range around that estimate. */
+  /** What runs on this network really cost, for the range around that estimate. */
   cost: RunCostStats;
   isLoading: boolean;
 }
 
+/**
+ * The live estimate, term by term.
+ *
+ * `liveUsd` mirrors what the relayer will actually debit rather than approximating it. The relayer
+ * charges the gas the swap's receipt records, plus the deduction leg priced ahead of itself at its
+ * measured gas widened by the record buffer, both at the chain's gas price and its token's USD
+ * price (backend/src/run-executor.ts). So the multiplication here is
+ * `chargeableGasUnits × gasPrice × nativeUsd` — where `chargeableGasUnits` already carries the
+ * headroom, and where the gas figure is the median of every run on record for that network rather
+ * than a build-time constant. Quoting the bare two-leg total against a seed was the whole reason
+ * the estimate came in roughly a third under the charges on the ledger.
+ */
 export function useRunCostBreakdown(chainId: number | undefined): RunCostBreakdown {
   const enabled = Boolean(chainId && chainId > 0);
   const { data: gasPriceWei, isLoading: gasLoading } = useGasPrice({
@@ -178,23 +267,31 @@ export function useRunCostBreakdown(chainId: number | undefined): RunCostBreakdo
 
   const {
     gasUnits,
+    chargeableGasUnits,
+    gasUnitsP90,
     source: gasUnitsSource,
+    basis,
     samples: gasUnitsSamples,
     cost,
   } = useRunGasProfile(chainId);
 
   const feeNative =
-    gasPriceWei != null ? Number(formatUnits(gasPriceWei * gasUnits, 18)) : null;
+    gasPriceWei != null ? Number(formatUnits(gasPriceWei * chargeableGasUnits, 18)) : null;
+  const burnNative = gasPriceWei != null ? Number(formatUnits(gasPriceWei * gasUnits, 18)) : null;
   const liveUsd = feeNative != null && nativeUsd != null ? feeNative * nativeUsd : null;
 
   return {
     gasPriceWei: gasPriceWei ?? null,
     gasPriceGwei: gasPriceWei != null ? Number(formatUnits(gasPriceWei, 9)) : null,
     feeNative,
+    burnNative,
     nativeUsd,
     nativeSource,
     gasUnits,
+    chargeableGasUnits,
+    gasUnitsP90,
     gasUnitsSource,
+    basis,
     gasUnitsSamples,
     liveUsd,
     cost,
@@ -217,6 +314,8 @@ export interface RunCostUsd {
   /** Gas both transactions burn, and whether that is measured or still seeded. */
   gasUnits: bigint;
   gasUnitsSource: GasUnitsSource;
+  /** Which record the measured figures came from. */
+  basis: RunCostBasis;
   gasPriceGwei: number | null;
   nativeUsd: number | null;
   nativeSource: PriceSource;
@@ -241,6 +340,7 @@ export function useRunCostUsd(chainId: number | undefined): RunCostUsd {
     cost,
     gasUnits,
     gasUnitsSource,
+    basis,
     gasPriceGwei,
     nativeUsd,
     nativeSource,
@@ -253,11 +353,17 @@ export function useRunCostUsd(chainId: number | undefined): RunCostUsd {
 
   return {
     typicalUsd,
-    worstUsd: Math.max(cost.maxUsd ?? 0, typicalUsd),
+    /*
+     * The worst run on record, or — where the record has nothing worse than the typical figure to
+     * offer — the live estimate, so a chain whose gas price has risen since its last run is not
+     * sized on a cheaper day than the one it is about to have.
+     */
+    worstUsd: Math.max(cost.maxUsd ?? 0, typicalUsd, liveUsd ?? 0),
     source,
     cost,
     gasUnits,
     gasUnitsSource,
+    basis,
     gasPriceGwei,
     nativeUsd,
     nativeSource,
