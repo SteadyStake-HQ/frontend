@@ -9,6 +9,7 @@ import { CHAIN_ICON_URLS } from "@/config/wagmi";
 import { useNetworkAllocation } from "@/app/hooks/useNetworkAllocation";
 import { useNetworkSwitcher } from "@/app/contexts/NetworkSwitcherContext";
 import { CustomConnectButton } from "./CustomConnectButton";
+import { GatedLink } from "./GatedLink";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
 function NetworkIcon({ className }: { className?: string }) {
@@ -210,13 +211,13 @@ export function Header() {
             className={mounted && isConnected ? "h-10 rounded-xl" : ""}
           />
           {!isDashboard && (
-            <Link
+            <GatedLink
               href="/dashboard"
               className="ss-btn ss-btn-primary ss-btn-sm ss-btn-glow h-10"
             >
               <StartDCAIcon className="h-4 w-4 shrink-0" />
               Start DCA
-            </Link>
+            </GatedLink>
           )}
         </div>
       </div>

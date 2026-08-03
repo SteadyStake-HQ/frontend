@@ -15690,3 +15690,139 @@ div.gt-why-toggle:hover {
   font-weight: 600;
   color: var(--hero-muted);
 }
+
+/* ── Service outage banner ───────────────────────────────────────────────
+   Site-wide notice that the network allocation cannot be read, so the app is
+   closed. Fixed to the top and above the header's own z-50 so it is the first
+   thing on the page in every route, including the dashboard's gate.
+
+   Amber, not red: nothing has gone wrong with the visitor's account or funds,
+   and the page they are reading still works. It is deliberately one line with a
+   hover tip rather than a paragraph — the detail is there for whoever wants it
+   without making everyone read it. */
+
+.ss-outage {
+  position: fixed;
+  z-index: 60;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid rgb(245 158 11 / 0.35);
+  background: rgb(245 158 11 / 0.14);
+  backdrop-filter: blur(8px);
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+}
+
+.ss-outage-body {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.ss-outage-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: rgb(245 158 11);
+  box-shadow: 0 0 0 3px rgb(245 158 11 / 0.22);
+  animation: ss-outage-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ss-outage-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.ss-outage-title {
+  color: #92400e;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.ss-outage-note {
+  color: var(--hero-muted);
+  cursor: help;
+  overflow: hidden;
+  text-decoration: underline dotted rgb(245 158 11 / 0.5);
+  text-underline-offset: 3px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ss-outage-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.ss-outage-chip {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid rgb(245 158 11 / 0.35);
+  border-radius: 9999px;
+  color: #92400e;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ss-outage-retry {
+  padding: 0.25rem 0.7rem;
+  border: 1px solid rgb(245 158 11 / 0.55);
+  border-radius: 0.5rem;
+  color: #92400e;
+  background: rgb(245 158 11 / 0.12);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: background 150ms ease;
+}
+
+.ss-outage-retry:hover:not(:disabled) {
+  background: rgb(245 158 11 / 0.26);
+}
+
+.ss-outage-retry:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+/* The banner is fixed, and the header is absolutely positioned at top: 0 over
+   the hero, so neither moves on its own. The component toggles this class on
+   <html> while the banner is up, and both are pushed down together. Scoping it
+   to the root rather than using a sibling selector keeps it off every other
+   top-level element on the page. */
+html.ss-outage-open body {
+  padding-top: 2.5rem;
+}
+
+html.ss-outage-open header {
+  top: 2.5rem;
+}
+
+.dark .ss-outage-title,
+.dark .ss-outage-chip,
+.dark .ss-outage-retry {
+  color: #fbbf24;
+}
+
+@media (max-width: 640px) {
+  .ss-outage-note {
+    display: none;
+  }
+}

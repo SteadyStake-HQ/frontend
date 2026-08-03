@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   useEffect,
   useMemo,
@@ -10,6 +9,7 @@ import {
 } from "react";
 import { useAccount } from "wagmi";
 import { CustomConnectButton } from "./CustomConnectButton";
+import { GatedLink } from "./GatedLink";
 import { HeroVisual } from "./HeroVisual";
 import { useHeroStats } from "@/app/hooks/useHeroStats";
 
@@ -283,7 +283,7 @@ export default function HeroSection() {
 
           <div className="hero-animate-scale hero-delay-400 flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row lg:items-start">
             {mounted && isConnected ? (
-              <Link href="/dashboard" className="ss-btn ss-btn-primary ss-btn-lg">
+              <GatedLink href="/dashboard" className="ss-btn ss-btn-primary ss-btn-lg">
                 Go to Dashboard
                 <svg
                   className="h-5 w-5"
@@ -299,7 +299,7 @@ export default function HeroSection() {
                     d="M13 7l5 5m0 0l-5 5m5-5H6"
                   />
                 </svg>
-              </Link>
+              </GatedLink>
             ) : (
               <CustomConnectButton
                 label="Start DCA - Connect wallet"

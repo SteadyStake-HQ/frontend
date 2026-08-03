@@ -3,6 +3,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { RevealOnScroll } from "./RevealOnScroll";
 import { BackToTop } from "./BackToTop";
+import { GatedLink } from "./GatedLink";
 
 const ONE_PAGER =
   "https://drive.google.com/file/d/1RJNWHbnwKXcuXThmmcbTm13E88dhG5SO/view?usp=sharing";
@@ -168,7 +169,7 @@ export function Footer() {
                 — your keys never leave your wallet.
               </p>
             </div>
-            <Link href="/dashboard" className="ss-btn ss-btn-primary self-start">
+            <GatedLink href="/dashboard" className="ss-btn ss-btn-primary self-start">
               <svg
                 className="h-4 w-4 shrink-0"
                 viewBox="0 0 24 24"
@@ -184,7 +185,7 @@ export function Footer() {
                 <path d="M6 20v-4" />
               </svg>
               Start your DCA plan
-            </Link>
+            </GatedLink>
           </div>
         </RevealOnScroll>
 

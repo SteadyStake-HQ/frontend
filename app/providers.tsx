@@ -8,6 +8,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { config } from "@/config/wagmi";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { NetworkThemeSync } from "./components/NetworkThemeSync";
+import { ServiceOutageBanner } from "./components/ServiceOutageBanner";
 import { NetworkSwitcherProvider } from "./contexts/NetworkSwitcherContext";
 import "@rainbow-me/rainbowkit/styles.css";
 
@@ -27,6 +28,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <ThemeProvider>
           <RainbowKitProvider theme={rainbowTheme}>
             <NetworkThemeSync />
+            {/*
+              Above the router outlet so it is on every route, including the dashboard's own gate.
+              It shares the query behind useNetworkAllocation with the rest of the app, so mounting
+              it here costs no extra request.
+            */}
+            <ServiceOutageBanner />
             <NetworkSwitcherProvider>{children}</NetworkSwitcherProvider>
             <ToastContainer
               position="bottom-center"
