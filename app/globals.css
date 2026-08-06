@@ -1612,10 +1612,13 @@ a[href] {
   place-items: center;
 }
 
-/* Soft bed of accent light under the token; breathes only while running */
+/* Soft bed of accent light under the token; breathes only while running.
+   z-index keeps it a *bed* — without it, this absolutely-positioned pseudo
+   paints above the non-positioned .pc-logo and veils the icon (looks blurred). */
 .pc-medallion::before {
   content: "";
   position: absolute;
+  z-index: -1;
   inset: -0.4rem;
   border-radius: 50%;
   pointer-events: none;

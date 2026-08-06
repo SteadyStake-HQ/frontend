@@ -13,6 +13,27 @@ const TRUST_CHAIN_SLUG: Partial<Record<number, string>> = {
   // Trust Wallet has no BOT Chain assets repo; 677/968 fall through to no logo.
 };
 
+/**
+ * CoinGecko hosts every coin image at three sizes on the same path — `/thumb/`
+ * (25px), `/small/` (~50px), `/large/` (~250px) — but its token *list* only ever
+ * links the thumb. Rendered at 32–56px that thumb is upscaled and looks blurry,
+ * so rewrite the size segment to `/large/` for the sharp asset. Non-CoinGecko
+ * URLs and URLs already at large/original are returned unchanged.
+ */
+export function upgradeCoinGeckoLogoUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    // Both the legacy (assets.coingecko.com) and current (coin-images.coingecko.com) hosts.
+    if (!u.hostname.endsWith("coingecko.com")) return url;
+    return url.replace(
+      /(\/coins\/images\/\d+\/)(thumb|small)(\/)/i,
+      (_m, pre: string, _size: string, post: string) => `${pre}large${post}`,
+    );
+  } catch {
+    return url;
+  }
+}
+
 /** Moralis CDN host – use proxy so we can use their logo URLs permanently. */
 export function isMoralisLogoUrl(url: string | undefined): boolean {
   if (!url || typeof url !== "string") return false;
@@ -40,7 +61,7 @@ export function getTokenLogoUrl(
   if (apiLogo && isMoralisLogoUrl(apiLogo)) {
     return `${PROXY_PATH}?url=${encodeURIComponent(apiLogo)}`;
   }
-  if (apiLogo && !isMoralisLogoUrl(apiLogo)) return apiLogo;
+  if (apiLogo && !isMoralisLogoUrl(apiLogo)) return upgradeCoinGeckoLogoUrl(apiLogo);
   const slug = TRUST_CHAIN_SLUG[chainId];
   if (!slug) return undefined;
   const addr = (

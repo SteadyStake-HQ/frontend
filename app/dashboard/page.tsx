@@ -12,6 +12,7 @@ import { Header } from "../components/Header";
 import { RevealOnScroll } from "../components/RevealOnScroll";
 import { DashboardCharts } from "../components/dashboard/DashboardCharts";
 import { DashboardPlans } from "../components/dashboard/DashboardPlans";
+import { AutoPlanCapacityCard } from "../components/dashboard/AutoPlanCapacityCard";
 import { DashboardStats } from "../components/dashboard/DashboardStats";
 import { DashboardStatsProvider } from "../components/dashboard/DashboardStatsContext";
 import { NewDcaModal } from "../components/dashboard/NewDcaModal";
@@ -194,6 +195,10 @@ export default function DashboardPage() {
           </DashboardStatsProvider>
           <RevealOnScroll className="dashboard-reveal">
             <DashboardPlans onAddPlan={() => setNewDcaOpen(true)} />
+          </RevealOnScroll>
+
+          <RevealOnScroll className="dashboard-reveal">
+            <AutoPlanCapacityCard />
           </RevealOnScroll>
 
           <NewDcaModal open={newDcaOpen} onClose={() => setNewDcaOpen(false)} />
