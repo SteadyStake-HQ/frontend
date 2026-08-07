@@ -22,7 +22,7 @@ const RETRY_WHILE_EMPTY_MS = 20_000;
 /**
  * Token list for swap/DCA. **The backend is the only source.**
  *
- * The list is curated per network on the backend dashboard (/tokens.html) and read here through
+ * The list is curated per network on the backend dashboard (/steadystake/tokens.html) and read here through
  * /api/tokens. There is deliberately no local fallback: the app used to keep a static list in
  * `config/trending-tokens.json` plus hand-maintained arrays in contracts.ts, and while that existed
  * the picker kept offering tokens no operator had approved — a removal on the dashboard did not

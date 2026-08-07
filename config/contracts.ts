@@ -2,7 +2,7 @@
  * Multi-chain contract config. Available networks from .env (NEXT_PUBLIC_SUPPORTED_CHAIN_IDS).
  *
  * **No token list lives here.** Which tokens a plan may buy is curated per network on the backend
- * dashboard (/tokens.html) and read at runtime through /api/tokens — see
+ * dashboard (/steadystake/tokens.html) and read at runtime through /api/tokens — see
  * app/hooks/useSupportedTokens.ts. It has exactly one source, on purpose: a second one here could
  * only ever disagree with the operator, and it did — the picker went on offering tokens from a
  * committed JSON file that no operator had approved.
