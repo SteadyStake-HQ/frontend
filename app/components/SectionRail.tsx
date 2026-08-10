@@ -11,6 +11,9 @@ const SECTIONS = [
   { id: "economics", label: "Economics" },
   { id: "reliability", label: "Control" },
   { id: "roadmap", label: "Roadmap" },
+  { id: "ecosystem", label: "Stack" },
+  { id: "play", label: "Play" },
+  { id: "token", label: "Token" },
 ] as const;
 
 /**

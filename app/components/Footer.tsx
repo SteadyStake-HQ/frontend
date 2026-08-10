@@ -8,6 +8,8 @@ import { GatedLink } from "./GatedLink";
 const ONE_PAGER =
   "https://drive.google.com/file/d/1RJNWHbnwKXcuXThmmcbTm13E88dhG5SO/view?usp=sharing";
 
+const ARENA_URL = "https://earena.steadystake.org";
+
 const SOCIAL = [
   {
     label: "X",
@@ -55,12 +57,14 @@ const COLUMNS: readonly { title: string; links: readonly FooterLink[] }[] = [
       { label: "Networks", href: "#networks" },
       { label: "How it works", href: "#how-it-works" },
       { label: "Economics", href: "#economics" },
+      { label: "Echo Arena", href: ARENA_URL, external: true },
     ],
   },
   {
     title: "Company",
     links: [
       { label: "Roadmap", href: "#roadmap" },
+      { label: "Token & AI", href: "#token" },
       { label: "Vision", href: "#vision" },
       { label: "Dashboard", href: "/dashboard" },
       { label: "One-pager", href: ONE_PAGER, external: true },
@@ -134,6 +138,7 @@ export function Footer() {
     sameAs: [
       "https://x.com/_steadystake",
       "https://telegram.me/+zsH_JP-eaDcxZTVh",
+      ARENA_URL,
       ONE_PAGER,
     ],
     contactPoint: {

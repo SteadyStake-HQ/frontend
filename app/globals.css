@@ -15987,3 +15987,1384 @@ html.ss-outage-open header {
     display: none;
   }
 }
+
+/* ============================================================
+   Hero social rail
+   The community links are a first-class call to action here, not
+   a footer afterthought: every pill carries its own accent aura
+   and a shine that crosses it on a slow, staggered clock, so the
+   row keeps catching the eye without ever moving.
+   ============================================================ */
+.hero-social {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 2.1rem;
+}
+
+.hero-social-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hero-muted);
+}
+
+.hero-social-label::before,
+.hero-social-label::after {
+  content: "";
+  height: 1px;
+  width: 2rem;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--hero-primary) 60%, transparent)
+  );
+}
+
+.hero-social-label::after {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--hero-primary) 60%, transparent),
+    transparent
+  );
+}
+
+.hero-social-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.hero-social-link {
+  --hs: var(--hero-primary);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--hs) 34%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--hs) 14%, transparent),
+    color-mix(in srgb, var(--hs) 5%, transparent)
+  );
+  padding: 0.4rem 1rem 0.4rem 0.4rem;
+  color: var(--foreground);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow:
+    inset 0 1px 0 var(--card-hi),
+    0 12px 28px -18px color-mix(in srgb, var(--hs) 90%, transparent);
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.3s ease-out,
+    box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Aura: a slow accent breath, so the pills read as lit rather than painted */
+.hero-social-link::before {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    closest-side circle at 20% 50%,
+    color-mix(in srgb, var(--hs) 34%, transparent),
+    transparent 70%
+  );
+  opacity: 0.4;
+  animation: hs-aura 5.5s ease-in-out infinite;
+  animation-delay: var(--hs-delay, 0s);
+}
+
+/* Shine: crosses the pill once per cycle, each pill on its own beat */
+.hero-social-link::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 0;
+  width: 40%;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--card-hi) 90%, transparent),
+    transparent
+  );
+  animation: hs-shine 6.5s ease-in-out infinite;
+  animation-delay: var(--hs-delay, 0s);
+}
+
+.hero-social-link > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes hs-aura {
+  0%,
+  100% {
+    opacity: 0.32;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@keyframes hs-shine {
+  0%,
+  58% {
+    transform: translateX(-150%) skewX(-16deg);
+  }
+  88%,
+  100% {
+    transform: translateX(320%) skewX(-16deg);
+  }
+}
+
+.hero-social-link:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--hs) 65%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--card-hi),
+    0 20px 40px -20px color-mix(in srgb, var(--hs) 100%, transparent);
+}
+
+.hero-social-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--hs) 70%, transparent);
+  outline-offset: 3px;
+}
+
+.hero-social-icon {
+  position: relative;
+  display: inline-flex;
+  height: 2.15rem;
+  width: 2.15rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--hs) 42%, transparent);
+  background: color-mix(in srgb, var(--hs) 16%, transparent);
+  color: var(--hs);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.hero-social-icon svg {
+  height: 1.1rem;
+  width: 1.1rem;
+}
+
+.hero-social-link:hover .hero-social-icon {
+  transform: scale(1.1) rotate(-6deg);
+}
+
+/* Live marker on the pill that points at something playable right now */
+.hero-social-live {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  height: 0.55rem;
+  width: 0.55rem;
+  border-radius: 9999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 2px var(--background);
+}
+
+.hero-social-live::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: #22c55e;
+  animation: hs-live-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes hs-live-ping {
+  75%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+.hero-social-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  text-align: left;
+}
+
+.hero-social-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.hero-social-sub {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--hero-muted);
+}
+
+.hero-social-arrow {
+  height: 0.85rem;
+  width: 0.85rem;
+  flex-shrink: 0;
+  color: var(--hero-muted);
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.3s ease-out;
+}
+
+.hero-social-link:hover .hero-social-arrow {
+  transform: translate(2px, -2px);
+  color: var(--hs);
+}
+
+@media (min-width: 1024px) {
+  .hero-social {
+    align-items: flex-start;
+  }
+  .hero-social-list {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 380px) {
+  .hero-social-sub {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-social-link::before,
+  .hero-social-link::after,
+  .hero-social-live::after {
+    animation: none;
+  }
+  .hero-social-link::after {
+    opacity: 0;
+  }
+}
+
+/* ============================================================
+   Ecosystem — DCA x AI x Play
+   The brand triangle, drawn rather than written: three pillars
+   orbiting one core, each fed by a link that keeps flowing.
+   ============================================================ */
+.eco-wordmark {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem 0.75rem;
+  margin-bottom: 1rem;
+  font-size: clamp(2.4rem, 9vw, 4.75rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.eco-word {
+  background-image: linear-gradient(
+    100deg,
+    var(--hero-primary),
+    var(--hero-secondary),
+    var(--hero-accent),
+    var(--hero-primary)
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: eco-word-shimmer 9s linear infinite;
+}
+
+.eco-word-2 {
+  animation-delay: -3s;
+}
+.eco-word-3 {
+  animation-delay: -6s;
+}
+
+@keyframes eco-word-shimmer {
+  to {
+    background-position: -300% 50%;
+  }
+}
+
+.eco-cross {
+  display: inline-block;
+  font-size: 0.45em;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--hero-muted) 80%, transparent);
+  animation: eco-cross-turn 7s ease-in-out infinite;
+}
+
+.eco-cross-2 {
+  animation-delay: -3.5s;
+}
+
+@keyframes eco-cross-turn {
+  0%,
+  100% {
+    rotate: 0deg;
+    opacity: 0.55;
+  }
+  50% {
+    rotate: 180deg;
+    opacity: 1;
+  }
+}
+
+.eco-engine {
+  display: block;
+  width: 100%;
+  max-width: 46rem;
+  height: auto;
+  margin: 0 auto;
+}
+
+/* The triangle the three pillars sit on */
+.eco-frame {
+  fill: none;
+  stroke: color-mix(in srgb, var(--hero-muted) 32%, transparent);
+  stroke-width: 1.2;
+  stroke-dasharray: 5 11;
+  animation: eco-frame-travel 22s linear infinite;
+}
+
+@keyframes eco-frame-travel {
+  to {
+    stroke-dashoffset: -160;
+  }
+}
+
+.eco-link-ghost {
+  fill: none;
+  stroke: color-mix(in srgb, var(--hero-muted) 22%, transparent);
+  stroke-width: 1.2;
+}
+
+.eco-link {
+  fill: none;
+  stroke: url(#eco-link);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 2 15;
+  animation: eco-link-flow 1.9s linear infinite;
+}
+
+@keyframes eco-link-flow {
+  to {
+    stroke-dashoffset: -17;
+  }
+}
+
+/* --- The core --- */
+.eco-core-glow {
+  animation: amb-breathe 7s ease-in-out infinite;
+}
+
+.eco-core-disc {
+  fill: color-mix(in srgb, var(--background) 78%, var(--hero-secondary));
+  stroke: color-mix(in srgb, var(--hero-secondary) 55%, transparent);
+  stroke-width: 1.5;
+}
+
+.eco-core-ring {
+  fill: none;
+  stroke: color-mix(in srgb, var(--hero-secondary) 60%, transparent);
+  stroke-width: 1.5;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: eco-ping 4s ease-out infinite;
+}
+
+@keyframes eco-ping {
+  0% {
+    scale: 1;
+    opacity: 0.7;
+  }
+  100% {
+    scale: 2.5;
+    opacity: 0;
+  }
+}
+
+.eco-core-mark {
+  fill: var(--hero-secondary);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: eco-turn 20s linear infinite;
+}
+
+@keyframes eco-turn {
+  to {
+    rotate: 360deg;
+  }
+}
+
+/* --- The pillars --- */
+.eco-node {
+  --eco-accent: var(--hero-primary);
+  animation: eco-node-bob 6.5s ease-in-out infinite;
+  animation-delay: var(--eco-delay, 0s);
+}
+
+/* `translate` composes with the transform attribute the node is placed by,
+   so the bob never fights the layout coordinates. */
+@keyframes eco-node-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -7px;
+  }
+}
+
+.eco-node-halo {
+  fill: color-mix(in srgb, var(--eco-accent) 16%, transparent);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: eco-halo 5s ease-in-out infinite;
+  animation-delay: var(--eco-delay, 0s);
+}
+
+@keyframes eco-halo {
+  0%,
+  100% {
+    scale: 0.9;
+    opacity: 0.5;
+  }
+  50% {
+    scale: 1.08;
+    opacity: 1;
+  }
+}
+
+.eco-node-disc {
+  fill: color-mix(in srgb, var(--background) 82%, var(--eco-accent));
+}
+
+.eco-node-ring {
+  fill: none;
+  stroke: color-mix(in srgb, var(--eco-accent) 70%, transparent);
+  stroke-width: 2;
+  stroke-dasharray: 34 12;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: eco-turn 26s linear infinite;
+}
+
+.eco-glyph {
+  fill: none;
+  stroke: var(--eco-accent);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.eco-glyph-fill {
+  fill: var(--eco-accent);
+  stroke: none;
+}
+
+.eco-glyph-base {
+  opacity: 0.45;
+}
+
+.eco-glyph-ghost {
+  opacity: 0.4;
+}
+
+.eco-node-label {
+  text-anchor: middle;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  fill: var(--foreground);
+}
+
+/* The engine scales with the column, so on a phone the labels have to grow in
+   user units to survive the shrink. */
+@media (max-width: 640px) {
+  .eco-node-label {
+    font-size: 24px;
+  }
+}
+
+/* --- Pillar cards --- */
+.eco-pillar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.eco-pillar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.eco-pillar-step {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: color-mix(in srgb, var(--card-accent) 72%, var(--foreground));
+}
+
+.eco-pillar-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 26%, transparent);
+  background: color-mix(in srgb, var(--card-accent) 10%, transparent);
+  padding: 0.2rem 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--card-accent) 68%, var(--foreground));
+}
+
+.eco-pillar-state-soon {
+  border-style: dashed;
+}
+
+.eco-pillar-dot {
+  height: 0.4rem;
+  width: 0.4rem;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: amb-breathe 2.2s ease-in-out infinite;
+}
+
+.eco-pillar-title {
+  font-size: 1.55rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--foreground);
+}
+
+.eco-pillar-body {
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--hero-muted);
+}
+
+.eco-pillar-beats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: auto;
+  padding-top: 0.35rem;
+}
+
+.eco-pillar-beat {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.72rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eco-word,
+  .eco-cross,
+  .eco-frame,
+  .eco-link,
+  .eco-core-glow,
+  .eco-core-ring,
+  .eco-core-mark,
+  .eco-node,
+  .eco-node-halo,
+  .eco-node-ring,
+  .eco-pillar-dot {
+    animation: none;
+  }
+  .eco-core-ring {
+    opacity: 0.35;
+  }
+}
+
+/* ============================================================
+   Arcade — Echo Arena, and the games queued behind it
+   The graphic is the game's own idea: a hull flies a loop, and
+   the runs it already flew keep replaying behind it.
+   ============================================================ */
+.ar-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin: 0 auto;
+  max-width: 52rem;
+}
+
+.ar-arena {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.ar-bounds {
+  fill: none;
+  stroke: color-mix(in srgb, var(--hero-accent) 34%, transparent);
+  stroke-width: 1.6;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ar-widen 10s ease-in-out infinite;
+}
+
+.ar-bounds-inner {
+  stroke: color-mix(in srgb, var(--hero-secondary) 22%, transparent);
+  stroke-dasharray: 3 9;
+  animation-delay: -1.2s;
+}
+
+/* The arena widens a little each cycle — the graphic breathes the same way */
+@keyframes ar-widen {
+  0%,
+  100% {
+    scale: 1;
+  }
+  50% {
+    scale: 1.03;
+  }
+}
+
+.ar-grid line {
+  stroke: color-mix(in srgb, var(--hero-muted) 26%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 2 10;
+}
+
+.ar-route-ghost {
+  fill: none;
+  stroke: color-mix(in srgb, var(--hero-muted) 24%, transparent);
+  stroke-width: 1.2;
+}
+
+.ar-route {
+  fill: none;
+  stroke: url(#ar-trail);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-dasharray: 2 14;
+  animation: ar-route-flow 2.4s linear infinite;
+}
+
+@keyframes ar-route-flow {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+/* --- The hull, and the runs it already flew --- */
+.ar-flyer {
+  offset-rotate: auto 90deg;
+  offset-distance: 0%;
+  animation: ar-fly 7s linear infinite;
+}
+
+@keyframes ar-fly {
+  to {
+    offset-distance: 100%;
+  }
+}
+
+.ar-hull {
+  fill: color-mix(in srgb, var(--hero-secondary) 62%, transparent);
+  stroke: var(--hero-secondary);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.ar-hull-live {
+  fill: var(--hero-accent);
+  stroke: color-mix(in srgb, var(--hero-accent) 70%, var(--foreground));
+  stroke-width: 1.8;
+}
+
+.ar-ship-glow {
+  fill: color-mix(in srgb, var(--hero-accent) 26%, transparent);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ar-thrust 1.4s ease-in-out infinite;
+}
+
+@keyframes ar-thrust {
+  0%,
+  100% {
+    scale: 0.85;
+    opacity: 0.55;
+  }
+  50% {
+    scale: 1.15;
+    opacity: 1;
+  }
+}
+
+/* --- Hostiles holding station --- */
+.ar-drifter {
+  animation: ar-drift 6s ease-in-out infinite;
+}
+
+@keyframes ar-drift {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 6px -9px;
+  }
+}
+
+.ar-drifter-core {
+  fill: var(--hero-primary);
+}
+
+.ar-drifter-ring {
+  fill: none;
+  stroke: color-mix(in srgb, var(--hero-primary) 55%, transparent);
+  stroke-width: 1.2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: eco-ping 3.4s ease-out infinite;
+}
+
+/* --- Arena readout --- */
+.ar-hud {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.ar-hud-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--hero-muted) 22%, transparent);
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  padding: 0.35rem 0.85rem;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.ar-hud-key {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--hero-muted);
+}
+
+/* Mixed toward the foreground so the readout still carries on the light
+   canvas, where the raw accents are far too pale to read as a number. */
+.ar-hud-val {
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--hero-accent) 62%, var(--foreground));
+}
+
+.ar-hud-sp .ar-hud-val {
+  color: color-mix(in srgb, var(--hero-primary) 62%, var(--foreground));
+}
+
+/* Counters driven straight from CSS: registered so the total can climb rather
+   than jump, and still readable as its initial value where it is not. */
+@property --ar-cycle {
+  syntax: "<integer>";
+  initial-value: 7;
+  inherits: false;
+}
+
+@property --ar-sp {
+  syntax: "<integer>";
+  initial-value: 1240;
+  inherits: false;
+}
+
+.ar-hud-cycle {
+  counter-reset: ar-cycle var(--ar-cycle, 7);
+  animation: ar-cycle-up 12s steps(1) infinite;
+}
+
+.ar-hud-cycle::after {
+  content: counter(ar-cycle);
+}
+
+@keyframes ar-cycle-up {
+  0% {
+    --ar-cycle: 7;
+  }
+  25% {
+    --ar-cycle: 8;
+  }
+  50% {
+    --ar-cycle: 9;
+  }
+  75% {
+    --ar-cycle: 10;
+  }
+}
+
+.ar-hud-ticker {
+  counter-reset: ar-sp var(--ar-sp, 1240);
+  animation: ar-sp-rise 9s linear infinite;
+}
+
+.ar-hud-ticker::after {
+  content: counter(ar-sp);
+}
+
+@keyframes ar-sp-rise {
+  from {
+    --ar-sp: 1240;
+  }
+  to {
+    --ar-sp: 1904;
+  }
+}
+
+/* --- Call to action under the arena --- */
+.ar-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.75rem;
+}
+
+.ar-cta-note {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--hero-muted);
+}
+
+/* --- Game slots --- */
+.ar-slot-link {
+  display: block;
+  height: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+.ar-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.ar-slot-building,
+.ar-slot-planned {
+  border-style: dashed;
+}
+
+.ar-slot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ar-slot-tag {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--card-accent) 72%, var(--foreground));
+}
+
+.ar-slot-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 26%, transparent);
+  background: color-mix(in srgb, var(--card-accent) 10%, transparent);
+  padding: 0.18rem 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--card-accent) 68%, var(--foreground));
+}
+
+.ar-slot-state-building,
+.ar-slot-state-planned {
+  border-style: dashed;
+  color: var(--hero-muted);
+  border-color: color-mix(in srgb, var(--hero-muted) 30%, transparent);
+  background: transparent;
+}
+
+.ar-slot-dot {
+  height: 0.4rem;
+  width: 0.4rem;
+  border-radius: 9999px;
+  background: #22c55e;
+  animation: amb-breathe 2s ease-in-out infinite;
+}
+
+.ar-slot-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+
+.ar-slot-body {
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--hero-muted);
+}
+
+.ar-slot-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: auto;
+  padding-top: 0.35rem;
+}
+
+.ar-slot-chip {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.72rem;
+}
+
+.ar-slot-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--card-accent) 78%, var(--foreground));
+}
+
+.ar-slot-go svg {
+  height: 0.95rem;
+  width: 0.95rem;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ar-slot-link:hover .ar-slot-go svg {
+  transform: translateX(4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ar-bounds,
+  .ar-route,
+  .ar-flyer,
+  .ar-ship-glow,
+  .ar-drifter,
+  .ar-drifter-ring,
+  .ar-hud-cycle,
+  .ar-hud-ticker,
+  .ar-slot-dot {
+    animation: none;
+  }
+  /* Without the ride the flyers would stack on the path origin */
+  .ar-echo {
+    display: none;
+  }
+  .ar-drifter-ring {
+    opacity: 0.4;
+  }
+}
+
+/* ============================================================
+   Token launch — the countdown, and what the token switches on
+   ============================================================ */
+.tk-panel {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  gap: 1.5rem;
+  align-items: center;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--card-border);
+  background: linear-gradient(180deg, var(--card-bg) 0%, var(--card-bg-2) 100%);
+  backdrop-filter: blur(18px) saturate(135%);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+  box-shadow:
+    inset 0 1px 0 var(--card-hi),
+    var(--card-shadow);
+  padding: 1.75rem 1.25rem;
+}
+
+.tk-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+.tk-panel-glow {
+  position: absolute;
+  inset: -30%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      28rem 20rem at 18% 20%,
+      color-mix(in srgb, var(--hero-primary) 20%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      30rem 22rem at 82% 78%,
+      color-mix(in srgb, var(--hero-secondary) 20%, transparent),
+      transparent 64%
+    );
+  animation: amb-drift 22s ease-in-out infinite;
+}
+
+.tk-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+  text-align: center;
+}
+
+.tk-clock-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--hero-muted);
+}
+
+.tk-units {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.tk-unit {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--hero-primary) 22%, transparent);
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  padding: 0.7rem 0.3rem 0.55rem;
+  text-align: center;
+}
+
+.tk-unit-value {
+  display: block;
+  font-size: clamp(1.4rem, 5vw, 2.1rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  background-image: linear-gradient(
+    150deg,
+    var(--hero-primary),
+    var(--hero-secondary)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.tk-unit-label {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--hero-muted);
+}
+
+/* The seconds tile is the one that visibly moves, so it gets the heartbeat */
+.tk-unit-seconds {
+  border-color: color-mix(in srgb, var(--hero-primary) 42%, transparent);
+}
+
+.tk-unit-seconds::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--hero-primary) 14%, transparent);
+  animation: tk-tick 1s linear infinite;
+}
+
+@keyframes tk-tick {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.tk-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--hero-primary) 32%, transparent);
+  background: color-mix(in srgb, var(--hero-primary) 10%, transparent);
+  padding: 0.3rem 0.8rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.tk-date-dot {
+  height: 0.45rem;
+  width: 0.45rem;
+  border-radius: 9999px;
+  background: var(--hero-primary);
+  animation: amb-breathe 2.4s ease-in-out infinite;
+}
+
+/* --- Signals in, position out --- */
+.tk-bloom {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.tk-edge {
+  fill: none;
+  stroke: color-mix(in srgb, var(--hero-secondary) 45%, transparent);
+  stroke-width: 1.4;
+  stroke-dasharray: 3 13;
+  animation: tk-edge-flow 2.6s linear infinite;
+  animation-delay: calc(var(--tk-i, 0) * -0.32s);
+}
+
+@keyframes tk-edge-flow {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+
+.tk-node {
+  fill: var(--hero-secondary);
+}
+
+.tk-node-halo {
+  fill: color-mix(in srgb, var(--hero-secondary) 22%, transparent);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tk-node-pulse 3.2s ease-in-out infinite;
+  animation-delay: calc(var(--tk-i, 0) * -0.45s);
+}
+
+@keyframes tk-node-pulse {
+  0%,
+  100% {
+    scale: 0.7;
+    opacity: 0.4;
+  }
+  50% {
+    scale: 1.25;
+    opacity: 1;
+  }
+}
+
+.tk-hub-glow {
+  animation: amb-breathe 6s ease-in-out infinite;
+}
+
+.tk-hub {
+  fill: color-mix(in srgb, var(--background) 74%, var(--hero-primary));
+}
+
+.tk-hub-edge {
+  fill: none;
+  stroke: color-mix(in srgb, var(--hero-primary) 85%, transparent);
+  stroke-width: 2;
+  stroke-dasharray: 40 14;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: eco-turn 16s linear infinite;
+}
+
+.tk-hub-ring {
+  fill: none;
+  stroke: color-mix(in srgb, var(--hero-primary) 50%, transparent);
+  stroke-width: 1.4;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: eco-ping 3.8s ease-out infinite;
+}
+
+.tk-hub-mark {
+  fill: var(--hero-primary);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: eco-turn 24s linear infinite reverse;
+}
+
+.tk-curve-ghost {
+  fill: none;
+  stroke: color-mix(in srgb, var(--hero-muted) 24%, transparent);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 8;
+}
+
+.tk-curve {
+  fill: none;
+  stroke: url(#tk-curve);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: tk-curve-draw 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes tk-curve-draw {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  55%,
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.tk-curve-head {
+  fill: var(--hero-primary);
+  offset-distance: 0%;
+  animation: tk-head-run 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes tk-head-run {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  55% {
+    offset-distance: 100%;
+    opacity: 1;
+  }
+  70%,
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+/* --- What the token switches on --- */
+.tk-unlocks {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+
+.tk-unlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-radius: 1rem;
+  border: 1px solid var(--card-border);
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
+  padding: 1rem;
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.3s ease-out;
+}
+
+.tk-unlock:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--hero-primary) 40%, transparent);
+}
+
+.tk-unlock-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.2rem;
+  width: 2.2rem;
+  border-radius: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--hero-primary) 24%, transparent);
+  background: color-mix(in srgb, var(--hero-primary) 10%, transparent);
+  color: var(--hero-primary);
+  animation: tk-unlock-glow 4.5s ease-in-out infinite;
+  animation-delay: calc(var(--tk-i, 0) * -1.1s);
+}
+
+.tk-unlock-icon svg {
+  height: 1.15rem;
+  width: 1.15rem;
+}
+
+@keyframes tk-unlock-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 18px -4px color-mix(in srgb, var(--hero-primary) 70%, transparent);
+  }
+}
+
+.tk-unlock-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.tk-unlock-body {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--hero-muted);
+}
+
+@media (min-width: 960px) {
+  .tk-panel {
+    grid-template-columns: minmax(0, 21rem) minmax(0, 1fr);
+    gap: 2rem;
+    padding: 2.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tk-panel-glow,
+  .tk-unit-seconds::after,
+  .tk-date-dot,
+  .tk-edge,
+  .tk-node-halo,
+  .tk-hub-glow,
+  .tk-hub-edge,
+  .tk-hub-ring,
+  .tk-hub-mark,
+  .tk-curve,
+  .tk-curve-head,
+  .tk-unlock-icon {
+    animation: none;
+  }
+  .tk-curve {
+    stroke-dashoffset: 0;
+  }
+  .tk-curve-head {
+    offset-distance: 100%;
+  }
+  .tk-hub-ring {
+    opacity: 0.3;
+  }
+}
