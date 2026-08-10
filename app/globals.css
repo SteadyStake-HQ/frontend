@@ -10035,6 +10035,19 @@ a[href] {
   object-fit: cover;
 }
 
+/* The avatar underneath is always painted and the image covers it only once it has decoded, so a
+   token whose logo URL is dead keeps its initials instead of the browser's torn-image icon. */
+.pl-token-img {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.pl-token-img.is-loaded {
+  opacity: 1;
+}
+
 .pl-token-fallback {
   display: grid;
   place-items: center;

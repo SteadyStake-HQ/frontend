@@ -324,6 +324,8 @@ export default function PlanPage() {
   const [logoUrlFallback, setLogoUrlFallback] = useState<string | null>(null);
   /** The helper's URL 404'd, so it is not an image however non-null it was. */
   const [logoFailed, setLogoFailed] = useState(false);
+  /** Whether the logo currently on screen has decoded — gates it over the initials beneath it. */
+  const [logoLoaded, setLogoLoaded] = useState(false);
   const [backendPlanTiming, setBackendPlanTiming] =
     useState<BackendPlanTiming | null>(null);
 
@@ -612,22 +614,28 @@ export default function PlanPage() {
         <header className="pl-hero-head">
           <span className="pl-token">
             <span className="pl-token-ring" aria-hidden />
-            {logo ? (
+            {/* The initials are the base layer, not the else-branch: a failing `<img>` draws the
+                browser's torn-image icon while its request is in flight, so branching on "is there
+                a URL" showed that icon in place of the avatar for every token whose URL was dead. */}
+            <span className="pl-token-fallback" aria-hidden>
+              {plan.token.slice(0, 2).toUpperCase()}
+            </span>
+            {logo && (
               <img
                 // Remounts when the src changes, so a second failure is reported too.
                 key={logo}
                 src={logo}
                 alt=""
-                className="pl-token-img"
+                className={`pl-token-img${logoLoaded ? " is-loaded" : ""}`}
                 width={56}
                 height={56}
                 decoding="async"
-                onError={() => setLogoFailed(true)}
+                onLoad={() => setLogoLoaded(true)}
+                onError={() => {
+                  setLogoLoaded(false);
+                  setLogoFailed(true);
+                }}
               />
-            ) : (
-              <span className="pl-token-fallback" aria-hidden>
-                {plan.token.slice(0, 2).toUpperCase()}
-              </span>
             )}
           </span>
 

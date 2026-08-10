@@ -150,27 +150,40 @@ function TokenLogo({ logo, symbol, name, className }: { logo?: string | string[]
    * its race — and without a retry the lettered avatar it falls back to is permanent.
    */
   const [sweep, setSweep] = useState(0);
+  /** Whether the current candidate has actually decoded — see the render for why it matters. */
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     queueMicrotask(() => {
       setAttempt(0);
       setSweep(0);
+      setLoaded(false);
     });
   }, [candidates]);
   const sizeClass = className ?? "h-6 w-6";
-  const current = candidates[attempt];
-  const showImg = current != null;
+  /**
+   * `attempt === candidates.length` is the exhausted state, and it has to be reachable: while
+   * `attempt` could only ever index a real URL, `current` was always a string, so a token whose
+   * every candidate 404'd kept rendering the last dead one and the browser drew its torn-image icon
+   * where the initials belonged. Running one past the end is what lets the avatar win.
+   */
+  const current: string | undefined = candidates[attempt];
 
   const onImageError = () => {
+    setLoaded(false);
     if (attempt + 1 < candidates.length) {
       setAttempt(attempt + 1);
       return;
     }
-    // Everything 404'd. Once, and only once, wait for the burst to drain and start over; a second
-    // failure of the whole list is an answer, and retrying it forever would be its own burst.
+    // Nothing left to try: show the initials now rather than holding a broken image on screen.
+    setAttempt(candidates.length);
+    // Then once, and only once, wait for the burst to drain and start over — a refusal under load
+    // is not a missing image. A second failure of the whole list is an answer, and retrying it
+    // forever would be its own burst.
     if (sweep === 0) {
       window.setTimeout(() => {
         setSweep(1);
         setAttempt(0);
+        setLoaded(false);
       }, 1200);
     }
   };
@@ -178,7 +191,15 @@ function TokenLogo({ logo, symbol, name, className }: { logo?: string | string[]
   const placeholder = fallbackLabel.length >= 2 ? fallbackLabel.slice(0, 2).toUpperCase() : fallbackLabel ? fallbackLabel.toUpperCase() : "?";
   return (
     <span className={`relative inline-flex ${sizeClass} shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--hero-muted)]/20 bg-[var(--hero-muted)]/5`}>
-      {showImg ? (
+      {/* The initials are the base layer rather than the else-branch of the image. An `<img>` whose
+          src is failing draws the browser's torn-image icon for as long as the request is in flight,
+          so branching on "do we have a URL" put that icon where the avatar belonged — every time, for
+          every token whose URL was dead. Here the avatar is simply what is underneath, and an image
+          covers it only once it has decoded. */}
+      <span className="flex h-full w-full items-center justify-center text-[10px] font-medium text-[var(--hero-muted)]" aria-hidden>
+        {placeholder}
+      </span>
+      {current != null && (
         <img
           // Keyed by URL and sweep so React remounts on advance and on retry; without it the element
           // keeps the failed image and never fires onError again, stalling on the first bad
@@ -186,19 +207,20 @@ function TokenLogo({ logo, symbol, name, className }: { logo?: string | string[]
           key={`${current}#${sweep}`}
           src={current}
           alt=""
-          className="h-full w-full object-cover"
+          // Positioned rather than hidden while it loads: a `display: none` image is never
+          // intersected, so it would defeat the lazy loading below and never fetch at all.
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${
+            loaded ? "opacity-100" : "opacity-0"
+          }`}
           width={24}
           height={24}
           // The dropdown is a long scrolling list; without this every row off screen still requests
           // its image on open, which is the burst that gets the tail of them refused.
           loading="lazy"
           decoding="async"
+          onLoad={() => setLoaded(true)}
           onError={onImageError}
         />
-      ) : (
-        <span className="flex h-full w-full items-center justify-center text-[10px] font-medium text-[var(--hero-muted)]" aria-hidden>
-          {placeholder}
-        </span>
       )}
     </span>
   );
