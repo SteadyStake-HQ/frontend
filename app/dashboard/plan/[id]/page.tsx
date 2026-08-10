@@ -322,6 +322,8 @@ export default function PlanPage() {
   );
 
   const [logoUrlFallback, setLogoUrlFallback] = useState<string | null>(null);
+  /** The helper's URL 404'd, so it is not an image however non-null it was. */
+  const [logoFailed, setLogoFailed] = useState(false);
   const [backendPlanTiming, setBackendPlanTiming] =
     useState<BackendPlanTiming | null>(null);
 
@@ -504,9 +506,18 @@ export default function PlanPage() {
     plan?.status === "active" &&
     (backendPlanTiming?.ready === true || plan.contractDueTimestamp <= chainNow);
 
-  // Fallback: fetch the logo from the API when the static helper has none (testnets).
+  /**
+   * Fallback: ask the API for a logo when the static helper has none, or when the one it gave
+   * turned out to be a dead link.
+   *
+   * The second case used to be invisible. The helper answers with a Trust Wallet URL for any token
+   * on a chain with an assets repo, whether or not the repo actually carries that token, so
+   * `tokenLogoUrl != null` meant "a URL exists" and was read as "an image exists" — the fallback
+   * never ran and the page rendered a broken `<img>`. `logoFailed` is the missing half of that
+   * condition, set by the element that finds out.
+   */
   useEffect(() => {
-    if (!plan?.token || plan.tokenLogoUrl != null || !schedule?.targetToken) {
+    if (!plan?.token || (plan.tokenLogoUrl != null && !logoFailed) || !schedule?.targetToken) {
       setLogoUrlFallback(null);
       return;
     }
@@ -522,7 +533,7 @@ export default function PlanPage() {
     return () => {
       cancelled = true;
     };
-  }, [plan?.token, plan?.tokenLogoUrl, chainId, schedule?.targetToken]);
+  }, [plan?.token, plan?.tokenLogoUrl, logoFailed, chainId, schedule?.targetToken]);
 
   if (!isConnected) {
     return (
@@ -556,7 +567,7 @@ export default function PlanPage() {
     );
   }
 
-  const logo = plan.tokenLogoUrl ?? logoUrlFallback;
+  const logo = (logoFailed ? logoUrlFallback : plan.tokenLogoUrl) ?? logoUrlFallback;
   /**
    * What the token costs right now. The live quote is the primary — it refreshes on its own while
    * the page is open — and the copy the timing poll carries is the fallback, so the board still
@@ -602,7 +613,17 @@ export default function PlanPage() {
           <span className="pl-token">
             <span className="pl-token-ring" aria-hidden />
             {logo ? (
-              <img src={logo} alt="" className="pl-token-img" width={56} height={56} />
+              <img
+                // Remounts when the src changes, so a second failure is reported too.
+                key={logo}
+                src={logo}
+                alt=""
+                className="pl-token-img"
+                width={56}
+                height={56}
+                decoding="async"
+                onError={() => setLogoFailed(true)}
+              />
             ) : (
               <span className="pl-token-fallback" aria-hidden>
                 {plan.token.slice(0, 2).toUpperCase()}
