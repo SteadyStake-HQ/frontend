@@ -3,7 +3,13 @@ import { parseEventLogs } from "viem";
 import { DCA_VAULT_ABI } from "@/config/abis";
 import { getDeployedVault } from "@/config/contracts";
 import { getServerPublicClient } from "@/lib/server-chain";
-import { isSupabaseConfigured, recordPlanCancelled, recordPlanCreated } from "@/lib/dca-plans-store";
+import {
+  isSupabaseConfigured,
+  recordPlanCancelled,
+  recordPlanCreated,
+  recordPlanExecuted,
+} from "@/lib/dca-plans-store";
+import { fetchTokenPriceUsd } from "@/lib/token-price";
 
 export const runtime = "nodejs";
 
@@ -13,12 +19,17 @@ export const runtime = "nodejs";
  *
  * Records the DCA plan lifecycle events contained in a confirmed transaction into `dca_plans`,
  * so the dashboard and executor can read plans from the database instead of scanning block logs
- * to rediscover them. Call it after any create/cancel transaction confirms.
+ * to rediscover them. Call it after any create/cancel/execute transaction confirms.
  *
  * Everything stored is read back from the chain (the receipt's logs and the schedule struct), not
  * taken from the request body — the caller only supplies which transaction to look at. Logs are
  * matched against the vault address for the given chain, so an unrelated or spoofed transaction
  * records nothing. That also makes the route safe to retry: recording is idempotent.
+ *
+ * The one thing here that is *not* read from the chain is the target token's USD price, because the
+ * chain does not know it. It is fetched at recording time, which is as close to the swap as this
+ * path can get and the only chance to capture it at all — no feed will say next week what a token
+ * cost this afternoon.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -83,6 +94,38 @@ export async function POST(request: NextRequest) {
           createdAt: at,
         });
         recorded.push({ event: "ScheduleCreated", scheduleId: scheduleId.toString() });
+      } else if (ev.eventName === "ScheduleExecuted") {
+        const { user, scheduleId, targetToken } = ev.args;
+        // Post-swap struct, so executed count and drawn-down deposit are exact rather than
+        // accumulated, and a plan that just depleted is recorded as completed. Same read the
+        // relayer does after its own runs (backend/src/run-executor.ts).
+        const schedule = (await client.readContract({
+          address: vault,
+          abi: DCA_VAULT_ABI,
+          functionName: "getSchedule",
+          args: [user, scheduleId],
+        })) as {
+          amountPerInterval: bigint;
+          totalAmount: bigint;
+          executedCount: bigint;
+          active: boolean;
+        };
+        // Best-effort, and uncached: this price is stamped against real money, so it asks for the
+        // price as of now. A missing price records the buy without one rather than blocking it.
+        const tokenPriceUsd = await fetchTokenPriceUsd(chainId, targetToken, 0).catch(() => null);
+
+        await recordPlanExecuted({
+          chainId,
+          userAddr: user,
+          scheduleId: Number(scheduleId),
+          executedCount: Number(schedule.executedCount),
+          swappedUsdc6: (schedule.amountPerInterval * schedule.executedCount).toString(),
+          remainingUsdc6: schedule.totalAmount.toString(),
+          active: Boolean(schedule.active),
+          at,
+          tokenPriceUsd,
+        });
+        recorded.push({ event: "ScheduleExecuted", scheduleId: scheduleId.toString() });
       } else if (ev.eventName === "ScheduleCancelled") {
         const { user, scheduleId, returnedAmount } = ev.args;
         await recordPlanCancelled({

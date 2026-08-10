@@ -56,7 +56,15 @@ async function ensureTables(p: Pool): Promise<void> {
            chain_id integer NOT NULL,
            user_addr text NOT NULL,
            created_at timestamptz NOT NULL DEFAULT now()
-         );`,
+         );
+         -- What the target token was worth at each buy. Added after the table shipped, so
+         -- deployments that already have it need the columns too. Kept identical to the DDL in
+         -- backend/src/supabase/dca-plans-store.ts, including the note on price_samples.
+         ALTER TABLE dca_plans ADD COLUMN IF NOT EXISTS start_price_usd double precision;
+         ALTER TABLE dca_plans ADD COLUMN IF NOT EXISTS last_price_usd double precision;
+         ALTER TABLE dca_plans ADD COLUMN IF NOT EXISTS last_price_at timestamptz;
+         ALTER TABLE dca_plans ADD COLUMN IF NOT EXISTS price_sum_usd double precision NOT NULL DEFAULT 0;
+         ALTER TABLE dca_plans ADD COLUMN IF NOT EXISTS price_samples integer NOT NULL DEFAULT 0;`,
       )
       .then(() => undefined)
       .catch((e) => {
@@ -128,6 +136,84 @@ export async function recordPlanCreated(input: RecordPlanCreatedInput): Promise<
   } finally {
     client.release();
   }
+}
+
+export interface RecordPlanExecutedInput {
+  chainId: number;
+  userAddr: string;
+  scheduleId: number;
+  /** authoritative post-swap values read from the schedule struct */
+  executedCount: number;
+  /** gross stablecoin drawn from the deposit so far (perInterval * executedCount) */
+  swappedUsdc6: string;
+  /** in-plan balance left after the swap; 0 means the plan just depleted */
+  remainingUsdc6: string;
+  /** false once the vault has retired the schedule (depleted) */
+  active: boolean;
+  at: Date;
+  /**
+   * USD price of the target token at the moment of the swap. Null when no feed could quote it —
+   * the buy is still recorded, it just carries no price rather than a made-up one.
+   */
+  tokenPriceUsd?: number | null;
+}
+
+/**
+ * Record a wallet-signed swap. The relayer records its own runs (backend/src/run-executor.ts); this
+ * is the same write for a run the user executed themselves from the dashboard, which until now went
+ * unrecorded — so a manually-run plan showed no progress and, more to the point here, no price at
+ * the one moment its price could still be captured.
+ *
+ * Kept a mirror of `recordPlanExecuted` in backend/src/supabase/dca-plans-store.ts, including the
+ * executed-count guard that makes the running price average safe to write twice.
+ */
+export async function recordPlanExecuted(input: RecordPlanExecutedInput): Promise<void> {
+  const p = getPool();
+  if (!p) throw new Error("SUPABASE_DB_URL is not configured.");
+  await ensureTables(p);
+  const committed = (BigInt(input.swappedUsdc6) + BigInt(input.remainingUsdc6)).toString();
+  const price =
+    typeof input.tokenPriceUsd === "number" &&
+    Number.isFinite(input.tokenPriceUsd) &&
+    input.tokenPriceUsd > 0
+      ? input.tokenPriceUsd
+      : null;
+  /**
+   * True only for a buy this row has not counted yet. Unqualified column references in an UPDATE's
+   * SET list read the *old* row, so this compares the incoming count against the stored one even
+   * though the same statement overwrites it — which is what stops the relayer and this path from
+   * both accumulating the same run into the average.
+   */
+  const isPricedNewBuy = "($4::integer > dca_plans.executed_count AND $9::double precision IS NOT NULL)";
+  await p.query(
+    `UPDATE dca_plans SET
+       executed_count = $4,
+       swapped_usdc6 = $5,
+       committed_usdc6 = COALESCE(committed_usdc6, $6),
+       last_execution_at = $7,
+       status = CASE WHEN $8::boolean THEN 'active' ELSE 'completed' END,
+       ended_at = CASE WHEN $8::boolean THEN ended_at ELSE COALESCE(ended_at, $7) END,
+       start_price_usd = CASE WHEN ${isPricedNewBuy} THEN COALESCE(start_price_usd, $9) ELSE start_price_usd END,
+       last_price_usd = CASE WHEN ${isPricedNewBuy} THEN $9 ELSE last_price_usd END,
+       last_price_at = CASE WHEN ${isPricedNewBuy} THEN $7 ELSE last_price_at END,
+       price_sum_usd = price_sum_usd + CASE WHEN ${isPricedNewBuy} THEN $9 ELSE 0 END,
+       price_samples = price_samples + CASE WHEN ${isPricedNewBuy} THEN 1 ELSE 0 END,
+       updated_at = now()
+     WHERE chain_id = $1 AND user_addr = $2 AND schedule_id = $3
+       -- never resurrect a cancelled plan
+       AND status <> 'cancelled'`,
+    [
+      input.chainId,
+      input.userAddr.toLowerCase(),
+      input.scheduleId,
+      input.executedCount,
+      input.swappedUsdc6,
+      committed,
+      input.at,
+      input.active,
+      price,
+    ],
+  );
 }
 
 export interface RecordPlanCancelledInput {

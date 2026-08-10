@@ -6,7 +6,15 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import { useAccount, useConfig } from "wagmi";
 import { formatUnits } from "viem";
 import { getStableDecimals } from "@/config/contracts";
-import { useDCASchedule, useContracts, useStableSymbol, usePlanExecutions, type PlanExecution } from "@/app/hooks";
+import {
+  useDCASchedule,
+  useContracts,
+  useStableSymbol,
+  usePlanExecutions,
+  useTokenPrice,
+  formatTokenPrice,
+  type PlanExecution,
+} from "@/app/hooks";
 import { DCA_FREQUENCY_INTERVALS, derivePlanRuns } from "@/app/hooks/useDCAHelpers";
 import { Header } from "@/app/components/Header";
 import { CancelScheduleButton } from "@/app/components/dca/CancelScheduleButton";
@@ -40,6 +48,30 @@ interface PlanDetails {
   estimatedCompletion: number | null;
 }
 
+/**
+ * What this plan's token is worth now, and what it was worth at its buys.
+ *
+ * The stamped figures come from `dca_plans`, written at each run (see backend/src/token-price.ts):
+ * the price of a past buy is not something any feed will hand back later, so a run that happened
+ * before price recording existed — or while every feed was down — simply has no price, and the page
+ * says so rather than filling the gap in.
+ */
+interface PlanPrices {
+  /** Market price right now. Null when no feed quotes this token, as on every testnet mock. */
+  currentUsd: number | null;
+  /** True when the live sources are failing and `currentUsd` is the last good one. */
+  currentStale: boolean;
+  /** Price at the plan's first priced buy — what the token cost when this plan started buying. */
+  startUsd: number | null;
+  /** Price at its most recent priced buy. */
+  lastUsd: number | null;
+  lastAt: string | null;
+  /** Mean of the prices stamped on its buys so far. */
+  avgUsd: number | null;
+  /** Buys carrying a price. Below `executedCount` when some ran without one. */
+  pricedCount: number;
+}
+
 interface BackendPlanTiming {
   chainClockOffsetSeconds: number;
   /** When the plan can next actually run: the contract cooldown plus any paused-countdown wait. */
@@ -50,6 +82,8 @@ interface BackendPlanTiming {
   adminControl: PlanAdminControl | null;
   /** Remainder of a paused countdown, running since the plan was resumed; null when free. */
   executionGate: PlanExecutionGate | null;
+  /** Null when the backend predates price recording, or could not read the plan store. */
+  prices: PlanPrices | null;
 }
 
 /* ---------- formatting ---------------------------------------------------- */
@@ -281,6 +315,12 @@ export default function PlanPage() {
     partial: historyPartial,
   } = usePlanExecutions(scheduleId, address, executedCount);
 
+  /** Live price of the token this plan buys, refreshed while the page is open. */
+  const livePrice = useTokenPrice(
+    chainId,
+    schedule?.targetToken ? String(schedule.targetToken) : undefined,
+  );
+
   const [logoUrlFallback, setLogoUrlFallback] = useState<string | null>(null);
   const [backendPlanTiming, setBackendPlanTiming] =
     useState<BackendPlanTiming | null>(null);
@@ -309,6 +349,15 @@ export default function PlanPage() {
             executionMode: "auto" | "manual" | null;
             adminControl: PlanAdminControl | null;
             executionGate?: PlanExecutionGate | null;
+            price?: {
+              currentUsd?: number | null;
+              currentStale?: boolean;
+              startUsd?: number | null;
+              lastUsd?: number | null;
+              lastAt?: string | null;
+              avgUsd?: number | null;
+              pricedCount?: number;
+            } | null;
           }>;
         };
         const timing = data.plans?.find(
@@ -325,6 +374,17 @@ export default function PlanPage() {
             executionMode: timing.executionMode,
             adminControl: timing.adminControl ?? null,
             executionGate: timing.executionGate ?? null,
+            prices: timing.price
+              ? {
+                  currentUsd: timing.price.currentUsd ?? null,
+                  currentStale: timing.price.currentStale === true,
+                  startUsd: timing.price.startUsd ?? null,
+                  lastUsd: timing.price.lastUsd ?? null,
+                  lastAt: timing.price.lastAt ?? null,
+                  avgUsd: timing.price.avgUsd ?? null,
+                  pricedCount: timing.price.pricedCount ?? 0,
+                }
+              : null,
           });
         }
       } catch {
@@ -497,6 +557,13 @@ export default function PlanPage() {
   }
 
   const logo = plan.tokenLogoUrl ?? logoUrlFallback;
+  /**
+   * What the token costs right now. The live quote is the primary — it refreshes on its own while
+   * the page is open — and the copy the timing poll carries is the fallback, so the board still
+   * fills in if /api/token-price cannot be reached but the backend can.
+   */
+  const currentPriceUsd = livePrice.usd ?? backendPlanTiming?.prices?.currentUsd ?? null;
+  const currentPriceStale = livePrice.usd != null ? livePrice.stale : backendPlanTiming?.prices?.currentStale === true;
   // Only meaningful while the plan can still run; a finished plan has no automation left to hold.
   const hold = plan.status === "active" ? backendHold : null;
   // The countdown as the hold caught it — what the plan owes, and what it resumes with.
@@ -771,7 +838,15 @@ export default function PlanPage() {
         </div>
       </div>
 
-      <section className="pl-panel pl-rise" style={cssVars({ "--i": 2 })}>
+      <PlanPriceBoard
+        token={plan.token}
+        currentUsd={currentPriceUsd}
+        currentStale={currentPriceStale}
+        prices={backendPlanTiming?.prices ?? null}
+        executedCount={plan.executedCount}
+      />
+
+      <section className="pl-panel pl-rise" style={cssVars({ "--i": 3 })}>
         <div className="pl-panel-head">
           <div>
             <h2>Execution history</h2>
@@ -809,6 +884,162 @@ export default function PlanPage() {
         </div>
       </section>
     </PlanShell>
+  );
+}
+
+/* ---------- prices --------------------------------------------------------- */
+
+/** Percentage change from `from` to `to`, or null when either side is unknown. */
+function pctChange(from: number | null, to: number | null): number | null {
+  if (from == null || to == null || from <= 0) return null;
+  return ((to - from) / from) * 100;
+}
+
+/** A signed percentage, tinted by direction. Zero is neither up nor down. */
+function PriceDelta({ pct, label }: { pct: number | null; label: string }) {
+  if (pct == null) return null;
+  const rounded = Math.abs(pct) < 0.05 ? 0 : pct;
+  const tone = rounded > 0 ? "is-up" : rounded < 0 ? "is-down" : "is-flat";
+  const sign = rounded > 0 ? "+" : "";
+  return (
+    <span className={`pl-delta ${tone}`}>
+      {rounded === 0 ? "unchanged" : `${sign}${rounded.toFixed(rounded > -10 && rounded < 10 ? 2 : 1)}%`}
+      <em>{label}</em>
+    </span>
+  );
+}
+
+/**
+ * What this plan's token costs now, next to what it cost at the plan's buys.
+ *
+ * These four numbers are the point of a DCA plan and none of them are on-chain: the price at a buy
+ * is stamped when that buy runs (backend/src/token-price.ts) because no feed will report it after
+ * the fact. So a plan whose runs predate price recording shows blanks here, and says why, rather
+ * than back-filling numbers nobody measured.
+ *
+ * The average is the mean of the prices its buys were made at — the figure "am I buying this cheaper
+ * than it is now" is asking about. It is not a cost basis: fees and slippage mean what the plan
+ * actually paid per token is a little worse, and the execution history below is where the amounts
+ * really received are listed.
+ */
+function PlanPriceBoard({
+  token,
+  currentUsd,
+  currentStale,
+  prices,
+  executedCount,
+}: {
+  token: string;
+  currentUsd: number | null;
+  currentStale: boolean;
+  prices: PlanPrices | null;
+  executedCount: number;
+}) {
+  const startUsd = prices?.startUsd ?? null;
+  const avgUsd = prices?.avgUsd ?? null;
+  const lastUsd = prices?.lastUsd ?? null;
+  const pricedCount = prices?.pricedCount ?? 0;
+  /**
+   * The plan store could not be read, so nothing is known about past buys — a different thing from
+   * knowing they carry no price. "We can't see it right now" and "it was never recorded" have
+   * different fixes, so they get different words.
+   */
+  const storeUnreadable = prices == null;
+  /** Why a stamped figure is missing, in the order the reasons apply. */
+  const missingReason = storeUnreadable
+    ? "Can't be read right now."
+    : executedCount === 0
+      ? "No buys yet."
+      : "Not recorded.";
+
+  // Nothing to show and nothing to explain: a plan that has never run has no buy prices by
+  // definition, and if no feed quotes the token either then the whole board would be blank.
+  if (currentUsd == null && pricedCount === 0 && executedCount === 0 && !storeUnreadable) return null;
+
+  const currentLabel = formatTokenPrice(currentUsd);
+  const startLabel = formatTokenPrice(startUsd);
+  const avgLabel = formatTokenPrice(avgUsd);
+  const lastLabel = formatTokenPrice(lastUsd);
+
+  return (
+    <section className="pl-panel pl-prices-panel pl-rise" style={cssVars({ "--i": 2 })}>
+      <div className="pl-panel-head">
+        <div>
+          <h2>{token} price</h2>
+          <p>
+            {storeUnreadable
+              ? "Live price now. Recorded buy prices are unavailable while the plan store can't be reached."
+              : pricedCount === 0
+                ? "Live price now. Prices are recorded from the next buy onwards."
+                : `Live price now, against the ${pricedCount === 1 ? "price" : "prices"} recorded at ${
+                    pricedCount === 1 ? "this plan's buy" : `this plan's ${pricedCount} buys`
+                  }.`}
+          </p>
+        </div>
+      </div>
+
+      <div className="pl-panel-body">
+        <dl className="pl-prices">
+          <div className="pl-price is-now">
+            <dt>Price now</dt>
+            <dd>
+              {currentLabel ?? "—"}
+              {currentLabel != null && currentStale && <small title="Live feeds are not answering; this is the last known price.">last known</small>}
+            </dd>
+            {currentLabel == null && <span className="pl-price-note">No feed quotes this token.</span>}
+          </div>
+
+          <div className="pl-price">
+            <dt>When this plan started</dt>
+            <dd>{startLabel ?? "—"}</dd>
+            {startLabel != null ? (
+              <PriceDelta pct={pctChange(startUsd, currentUsd)} label="since first buy" />
+            ) : (
+              <span className="pl-price-note">{missingReason}</span>
+            )}
+          </div>
+
+          <div className="pl-price">
+            <dt>Average across your buys</dt>
+            <dd>{avgLabel ?? "—"}</dd>
+            {avgLabel != null ? (
+              // Price now against the average bought at: above the average and the position is up
+              // on what it was bought for, below it and the plan is still buying the dip.
+              <PriceDelta pct={pctChange(avgUsd, currentUsd)} label="vs your average" />
+            ) : (
+              <span className="pl-price-note">
+                {storeUnreadable ? missingReason : executedCount === 0 ? "Starts with your first buy." : "No prices recorded yet."}
+              </span>
+            )}
+          </div>
+
+          <div className="pl-price">
+            <dt>At your last buy</dt>
+            <dd>{lastLabel ?? "—"}</dd>
+            {lastLabel != null ? (
+              <span className="pl-price-note">
+                {prices?.lastAt ? fullDateTime(Math.floor(new Date(prices.lastAt).getTime() / 1000)) : "Recorded"}
+              </span>
+            ) : (
+              <span className="pl-price-note">
+                {storeUnreadable ? missingReason : executedCount === 0 ? "Nothing has run yet." : "Not recorded."}
+              </span>
+            )}
+          </div>
+        </dl>
+
+        {/* A plan can have more buys than prices: recording started partway through its life, or a
+            run happened while every feed was down. Say so — an average over 3 of 10 buys is a
+            different claim from an average over all of them. */}
+        {!storeUnreadable && executedCount > 0 && pricedCount < executedCount && (
+          <p className="pl-note">
+            {pricedCount === 0
+              ? `None of this plan's ${executedCount} buys carry a recorded price — they ran before prices were recorded, or while no feed could quote ${token}.`
+              : `${pricedCount} of ${executedCount} buys carry a recorded price, so the average above covers those buys only.`}
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 

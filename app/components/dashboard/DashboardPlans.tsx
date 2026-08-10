@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
-import { useAccount, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { useContracts, useStableSymbol } from "@/app/hooks";
 import { useDashboardStore, type DashboardPlanRecord } from "@/app/store/useDashboardStore";
 import { ExecuteSwapButton } from "../dca/ExecuteSwapButton";
@@ -15,6 +15,7 @@ import {
 import { LoadingSkeleton } from "../LoadingComponents";
 import { DCA_VAULT_ABI } from "@/config/abis";
 import { parseTxError } from "@/lib/parse-tx-error";
+import { recordPlanTxWhenMined } from "@/lib/record-plan-tx";
 
 interface DashboardPlansProps {
   onAddPlan?: () => void;
@@ -557,6 +558,7 @@ export function DashboardPlans({ onAddPlan }: DashboardPlansProps) {
   const { address, isConnected } = useAccount();
   const { chainId, contracts } = useContracts();
   const { writeContract, isPending } = useWriteContract();
+  const publicClient = usePublicClient({ chainId });
   const plans = useDashboardStore((state) => state.plans);
   const activeSchedules = useDashboardStore((state) => state.activeSchedules);
   const scheduleCount = useDashboardStore((state) => state.scheduleCount);
@@ -654,8 +656,12 @@ export function DashboardPlans({ onAddPlan }: DashboardPlansProps) {
               chainId,
             },
             {
-              onSuccess: () => {
+              onSuccess: (hash) => {
                 setExecutionTimeline((prev) => ({ ...prev, [idStr]: "success" }));
+                // Record it once it mines, without holding the queue: the next plan can be signed
+                // while this one confirms. This is the only chance to capture what the token was
+                // worth at this buy — see recordPlanTxWhenMined.
+                void recordPlanTxWhenMined(publicClient, chainId, hash);
                 setTimeout(resolve, 1500);
               },
               onError: (err) => {

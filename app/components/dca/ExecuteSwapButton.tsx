@@ -5,6 +5,7 @@ import { usePublicClient, useWriteContract } from "wagmi";
 import { useContracts } from "@/app/hooks";
 import { DCA_VAULT_ABI } from "@/config/abis";
 import { parseTxError } from "@/lib/parse-tx-error";
+import { recordPlanTx } from "@/lib/record-plan-tx";
 
 interface ExecuteSwapButtonProps {
   userAddress: string;
@@ -86,11 +87,17 @@ export function ExecuteSwapButton({
           onSuccess: async (hash) => {
             // Wait for the receipt rather than guessing: releasing the button before the swap is
             // mined invites a second click that the vault would only reject after spending gas.
+            let mined = false;
             try {
-              await publicClient?.waitForTransactionReceipt({ hash });
+              const receipt = await publicClient?.waitForTransactionReceipt({ hash });
+              mined = receipt?.status === "success";
             } catch {
               // Fall through — the plan's cooldown reflects the real outcome either way.
             }
+            // Only a mined, successful swap is a buy worth recording; the route would reject a
+            // reverted one anyway, and asking it to is a round trip for nothing. This is what
+            // captures what the token was worth at this buy — see recordPlanTx.
+            if (mined) await recordPlanTx(chainId, hash);
             await settle();
             onSuccess?.();
           },

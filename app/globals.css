@@ -10834,6 +10834,117 @@ a[href] {
   line-height: 1.5;
 }
 
+/* --- Price board: what the token costs now, against what this plan bought at --- */
+.pl-prices-panel .pl-panel-body {
+  padding-top: 1.1rem;
+}
+
+.pl-prices {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.pl-price {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.95rem 1.05rem;
+  border: 1px solid var(--card-border);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
+}
+
+/* The live price is the one the others are read against, so it leads. */
+.pl-price.is-now {
+  border-color: color-mix(in srgb, var(--hero-primary) 35%, var(--card-border));
+  background: color-mix(in srgb, var(--hero-primary) 8%, transparent);
+}
+
+.pl-price dt {
+  color: var(--hero-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.pl-price dd {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  color: var(--foreground);
+  font-size: 1.15rem;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* "last known" on a price whose feeds have stopped answering. */
+.pl-price dd small {
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--hero-accent) 88%, var(--foreground));
+}
+
+.pl-price-note {
+  color: var(--hero-muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.pl-delta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-size: 0.74rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.pl-delta em {
+  font-style: normal;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--hero-muted);
+}
+
+/* Direction, not judgement: a plan still buying wants the price down, one holding wants it up.
+   Neither hue can come from the palette — light's --hero-primary is pink — so both are literal,
+   picked to stay legible on #fafafa and on #1e1e2e. */
+.pl-delta.is-up {
+  color: #15803d;
+}
+
+.pl-delta.is-down {
+  color: #dc2626;
+}
+
+.pl-delta.is-flat {
+  color: var(--hero-muted);
+}
+
+.dark .pl-delta.is-up {
+  color: #4ade80;
+}
+
+.dark .pl-delta.is-down {
+  color: #f87171;
+}
+
+/* Before the theme class lands, follow the system preference like the tokens above do. */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) .pl-delta.is-up {
+    color: #4ade80;
+  }
+
+  :root:not(.light) .pl-delta.is-down {
+    color: #f87171;
+  }
+}
+
 /* --- Responsive ---------------------------------------------------------- */
 @media (max-width: 820px) {
   .pl-hero-body {
@@ -10845,7 +10956,8 @@ a[href] {
     width: 100%;
   }
 
-  .pl-facts {
+  .pl-facts,
+  .pl-prices {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -10856,7 +10968,8 @@ a[href] {
     width: 100%;
   }
 
-  .pl-metrics {
+  .pl-metrics,
+  .pl-prices {
     grid-template-columns: 1fr;
   }
 
@@ -11566,6 +11679,38 @@ a[href] {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--hero-secondary) 88%, var(--foreground));
+}
+
+/* Live USD price of the token, on the picker button and on every row of the list. Tabular figures
+   so a column of prices lines up on the decimal point instead of jittering per row. */
+.dm-token-price {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: baseline;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--hero-primary) 85%, var(--foreground));
+}
+
+.dm-token-price.is-muted {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--hero-muted) 85%, transparent);
+}
+
+/* A price every feed has stopped confirming still beats no price, but it must not read as live. */
+.dm-token-price.is-stale {
+  color: color-mix(in srgb, var(--hero-accent) 88%, var(--foreground));
+}
+
+.dm-token-price small {
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
 }
 
 .dm-pop {

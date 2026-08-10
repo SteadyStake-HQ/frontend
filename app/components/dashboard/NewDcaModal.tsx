@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { useAccount, useBalance, useReadContract, useReadContracts, useWaitForTransactionReceipt } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
-import { useDCAVault, useDCAVaultRead, useTokenApproval, useTokenAllowance, useContracts, useStableSymbol, useGasTank, useGasTankAllChains, useGasTankLevel, useGasTankRefresh, useEstimatedRunCostUsdc6, useNetworkAllocation } from "@/app/hooks";
+import { useDCAVault, useDCAVaultRead, useTokenApproval, useTokenAllowance, useContracts, useStableSymbol, useGasTank, useGasTankAllChains, useGasTankLevel, useGasTankRefresh, useEstimatedRunCostUsdc6, useNetworkAllocation, useTokenPrices, formatTokenPrice } from "@/app/hooks";
+import type { TokenPriceItem } from "@/app/api/token-price/route";
 import { GasTankGauge, formatGasAmount } from "./GasTankVisuals";
 import { CHAIN_NAMES, FREQUENCY_MAP } from "@/lib/constants";
 import { useSupportedTokens } from "@/app/hooks/useSupportedTokens";
@@ -145,14 +146,64 @@ function TokenLogo({ logo, symbol, name, className }: { logo?: string; symbol: s
   );
 }
 
+/**
+ * The token's USD price, or a reason there isn't one.
+ *
+ * A plan buys a token, so its price is the one fact the picker was missing: two tokens with the same
+ * name are told apart by it, and "$25 per run" means nothing until you know what $25 buys. Testnet
+ * mocks and tokens too new to be listed have no feed, so "No price feed" is a state this renders
+ * rather than a gap — see backend/src/token-price.ts.
+ */
+function TokenPriceTag({
+  price,
+  loading,
+  unavailable,
+}: {
+  price?: TokenPriceItem;
+  loading: boolean;
+  unavailable: boolean;
+}) {
+  const formatted = formatTokenPrice(price?.usd);
+  if (formatted == null) {
+    if (loading) return <span className="dm-token-price is-muted">Pricing…</span>;
+    return (
+      <span className="dm-token-price is-muted" title={unavailable ? "Price feeds can't be reached right now." : "No market feed quotes this token."}>
+        {unavailable ? "Price unavailable" : "No price feed"}
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`dm-token-price ${price?.stale ? "is-stale" : ""}`}
+      title={
+        price?.stale
+          ? `Last known price${price.at ? ` from ${new Date(price.at).toLocaleString()}` : ""} — live feeds are not answering.`
+          : price?.source
+            ? `Price from ${price.source}`
+            : undefined
+      }
+    >
+      {formatted}
+      {price?.stale && <small>stale</small>}
+    </span>
+  );
+}
+
 function TokenDropdown({
   value,
   onChange,
   options,
+  prices,
+  pricesLoading,
+  pricesUnavailable,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: TokenOption[];
+  /** USD price by lowercased address; missing means no feed quotes that token. */
+  prices: Map<string, TokenPriceItem>;
+  pricesLoading: boolean;
+  pricesUnavailable: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -195,6 +246,13 @@ function TokenDropdown({
           {selected?.symbol && <span className="dm-token-sym">{selected.symbol}</span>}
         </span>
         {selected?.isCustom && <span className="dm-tag">Custom</span>}
+        {selected && (
+          <TokenPriceTag
+            price={prices.get(selected.address.toLowerCase())}
+            loading={pricesLoading}
+            unavailable={pricesUnavailable}
+          />
+        )}
         <svg className="dm-token-caret" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
@@ -243,6 +301,11 @@ function TokenDropdown({
                       <span className="dm-token-sym">{t.symbol}</span>
                     </span>
                     {t.isCustom && <span className="dm-tag">Custom</span>}
+                    <TokenPriceTag
+                      price={prices.get(t.address.toLowerCase())}
+                      loading={pricesLoading}
+                      unavailable={pricesUnavailable}
+                    />
                   </button>
                 </li>
               ))
@@ -456,6 +519,20 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
   const selectedTokenAddress = selectedOption?.address;
 
   const optionAddressesKey = allTokenOptions.map((t) => t.address).sort().join(",");
+  /**
+   * USD price of every token the picker offers, in one request. The list is memoised on the same key
+   * the reset effect below uses, so prices are refetched when the offered set changes and not on
+   * every keystroke in the amount field.
+   */
+  const priceAddresses = useMemo(
+    () => optionAddressesKey.split(",").filter(Boolean),
+    [optionAddressesKey],
+  );
+  const {
+    byAddress: tokenPrices,
+    isLoading: isLoadingPrices,
+    isUnavailable: pricesUnavailable,
+  } = useTokenPrices(chainId, priceAddresses, { enabled: open });
   useEffect(() => {
     if (allTokenOptions.length === 0) return;
     const currentInList = token && allTokenOptions.some((t) => t.address.toLowerCase() === token.toLowerCase());
@@ -1279,7 +1356,14 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                       </div>
                     ) : (
                       <>
-                        <TokenDropdown value={token} onChange={(v) => setToken(v)} options={allTokenOptions} />
+                        <TokenDropdown
+                          value={token}
+                          onChange={(v) => setToken(v)}
+                          options={allTokenOptions}
+                          prices={tokenPrices}
+                          pricesLoading={isLoadingPrices}
+                          pricesUnavailable={pricesUnavailable}
+                        />
                         <div className="dm-add">
                           <input
                             type="text"
