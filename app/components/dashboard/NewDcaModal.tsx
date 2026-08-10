@@ -203,7 +203,8 @@ function TokenDropdown({
   /** USD price by lowercased address; missing means no feed quotes that token. */
   prices: Map<string, TokenPriceItem>;
   pricesLoading: boolean;
-  pricesUnavailable: boolean;
+  /** Addresses whose price request failed — absent for a different reason than the rest. */
+  pricesUnavailable: Set<string>;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -250,7 +251,7 @@ function TokenDropdown({
           <TokenPriceTag
             price={prices.get(selected.address.toLowerCase())}
             loading={pricesLoading}
-            unavailable={pricesUnavailable}
+            unavailable={pricesUnavailable.has(selected.address.toLowerCase())}
           />
         )}
         <svg className="dm-token-caret" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -304,7 +305,7 @@ function TokenDropdown({
                     <TokenPriceTag
                       price={prices.get(t.address.toLowerCase())}
                       loading={pricesLoading}
-                      unavailable={pricesUnavailable}
+                      unavailable={pricesUnavailable.has(t.address.toLowerCase())}
                     />
                   </button>
                 </li>
@@ -531,8 +532,24 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
   const {
     byAddress: tokenPrices,
     isLoading: isLoadingPrices,
-    isUnavailable: pricesUnavailable,
+    unavailableAddresses: pricesUnavailable,
   } = useTokenPrices(chainId, priceAddresses, { enabled: open });
+  /**
+   * The same options, tokens that have a price first.
+   *
+   * Rendering order only — `allTokenOptions` stays the list that drives the price request and the
+   * default selection, so the token the modal opens on does not change under the user when prices
+   * land. Held back until prices have settled for the same reason: sorting a list that is still
+   * filling in makes rows jump while someone is reading them.
+   *
+   * Ties keep their original position, so within each group the operator's sortRank still decides.
+   */
+  const displayTokenOptions = isLoadingPrices
+    ? allTokenOptions
+    : [
+        ...allTokenOptions.filter((t) => tokenPrices.has(t.address.toLowerCase())),
+        ...allTokenOptions.filter((t) => !tokenPrices.has(t.address.toLowerCase())),
+      ];
   useEffect(() => {
     if (allTokenOptions.length === 0) return;
     const currentInList = token && allTokenOptions.some((t) => t.address.toLowerCase() === token.toLowerCase());
@@ -1359,7 +1376,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                         <TokenDropdown
                           value={token}
                           onChange={(v) => setToken(v)}
-                          options={allTokenOptions}
+                          options={displayTokenOptions}
                           prices={tokenPrices}
                           pricesLoading={isLoadingPrices}
                           pricesUnavailable={pricesUnavailable}
