@@ -4836,7 +4836,192 @@ a[href] {
   color: transparent;
 }
 
-/* CTAs use the shared .ss-btn system — see "Buttons" at the end of this file. */
+/* --- Hero CTAs -----------------------------------------------------------
+   Buttons themselves come from the shared .ss-btn system — see "Buttons" at
+   the end of this file. What lives here is only the hero's arrangement of
+   them, which is two tiers rather than one row:
+
+     [ Join the Token Presale · Aug 17–30 ]     ← dated, closes, gets its own line
+     [ Start DCA ]  [ See how it works ]        ← standing, always available
+
+   The presale is the one CTA on this page with a deadline, so it is the only
+   one that gets the filled treatment; the pair beneath it steps down to glass
+   and ghost so the eye lands on the sale first and still finds the product.
+   ------------------------------------------------------------------------ */
+.hero-cta {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.hero-cta-row {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* The wallet CTA renders as a button, a div or a link depending on connection
+   state — pin the width here so the row does not resize as it settles. */
+.hero-cta-wallet {
+  width: 100%;
+  max-width: 24rem;
+}
+
+@media (min-width: 640px) {
+  .hero-cta-row {
+    width: auto;
+    flex-direction: row;
+  }
+
+  .hero-cta-wallet {
+    width: auto;
+  }
+}
+
+@media (min-width: 1024px) {
+  .hero-cta,
+  .hero-cta-row {
+    align-items: flex-start;
+  }
+}
+
+/* The presale CTA: wider, taller and two-line, so it outranks the pair below
+   on size alone before its colour is read. */
+.hero-presale-cta {
+  --ss-btn-pad-y: 0.8rem;
+  --ss-btn-pad-x: 1.15rem;
+  --ss-btn-radius: 1.1rem;
+  --ss-btn-lift: -3px;
+
+  /* Stays full-width at every breakpoint rather than shrinking to its label:
+     sized to content it would come out narrower than the two buttons below it,
+     which is the opposite of the ranking this layout exists to express. */
+  width: 100%;
+  max-width: 24rem;
+  justify-content: flex-start;
+  gap: 0.85rem;
+  text-align: left;
+}
+
+@media (min-width: 640px) {
+  .hero-presale-cta {
+    --ss-btn-pad-x: 1.35rem;
+    max-width: 30rem;
+  }
+}
+
+.hero-presale-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  background: rgb(255 255 255 / 0.28);
+}
+
+.hero-presale-icon svg {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+.hero-presale-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.hero-presale-title {
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+/* The sale window, and — once the clock has been read on the client — how far
+   away it is. Allowed to wrap: .ss-btn is nowrap, which would clip this line
+   on a narrow phone rather than let it fall onto a second row. */
+.hero-presale-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.45rem;
+  white-space: normal;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hero-presale-dates {
+  opacity: 0.78;
+}
+
+.hero-presale-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 9999px;
+  border: 1px solid rgb(0 0 0 / 0.14);
+  background: rgb(255 255 255 / 0.42);
+  padding: 0.1rem 0.45rem;
+}
+
+.hero-presale-status-dot {
+  position: relative;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 9999px;
+  background: #166534;
+}
+
+.hero-presale-status-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  animation: hero-presale-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes hero-presale-ping {
+  0% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+.hero-presale-arrow {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-left: auto;
+  padding-left: 0.35rem;
+  opacity: 0.85;
+}
+
+/* Once the sale has closed the button stays — the page still links to it — but
+   it stops shouting. */
+.hero-presale-cta[data-phase="ended"] {
+  filter: saturate(0.55) brightness(0.95);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-presale-status-dot::after {
+    animation: none;
+  }
+}
 
 /* --- Trust markers --- */
 .hero-trust {
@@ -9779,6 +9964,85 @@ a[href] {
     inset 0 1px 0 rgb(255 255 255 / 0.32),
     0 18px 38px -16px rgb(16 185 129 / 0.9),
     0 0 24px rgb(16 185 129 / 0.28);
+}
+
+/* --- Variant: presale (a dated window that closes — the one CTA that is not
+   part of the standing product, so it does not borrow the brand fill. It sits
+   next to network-themed buttons whose hue changes per chain; a fixed autumn
+   gold is what keeps the sale recognisable as the same thing everywhere, and
+   is why this variant carries literal colours where a normal button must not.
+   Dark ink on gold clears contrast in both palettes.) --- */
+.ss-btn-presale {
+  --ss-btn-bloom: #f59e0b;
+  color: #2c1a04;
+  border: 1px solid transparent;
+  background-image: linear-gradient(
+    100deg,
+    #f59e0b 0%,
+    #fbbf24 34%,
+    #fcd34d 52%,
+    #fb923c 78%,
+    #f59e0b 100%
+  );
+  background-size: 190% auto;
+  background-position: 0% center;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.4),
+    0 12px 32px -14px rgb(245 158 11 / 0.85);
+  transition:
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.28s ease,
+    background-position 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.22s ease;
+}
+
+.ss-btn-presale:hover {
+  background-position: 100% center;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.5),
+    0 20px 42px -16px rgb(245 158 11 / 0.95),
+    0 0 30px rgb(251 191 36 / 0.35);
+}
+
+.ss-btn-presale:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px #f59e0b;
+}
+
+/* A slow halo so the sale is findable without a marquee. It animates
+   box-shadow, which is also what draws the focus ring and the hover lift —
+   stand it down whenever either of those needs to be seen. */
+.ss-btn-presale:not([data-phase="ended"]) {
+  animation: ss-btn-presale-halo 3s ease-in-out infinite;
+}
+
+.ss-btn-presale:hover,
+.ss-btn-presale:focus-visible,
+.ss-btn-presale:active {
+  animation: none;
+}
+
+@keyframes ss-btn-presale-halo {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.4),
+      0 12px 32px -14px rgb(245 158 11 / 0.85),
+      0 0 0 0 rgb(251 191 36 / 0.45);
+  }
+  60% {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.4),
+      0 12px 32px -14px rgb(245 158 11 / 0.85),
+      0 0 0 9px rgb(251 191 36 / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-btn-presale:not([data-phase="ended"]) {
+    animation: none;
+  }
 }
 
 /* --- Sizes --- */

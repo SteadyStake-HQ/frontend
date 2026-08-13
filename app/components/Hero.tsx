@@ -23,6 +23,54 @@ const HERO_CHAINS = [
   { name: "Kava", iconUrl: "/kava.svg" },
 ] as const;
 
+/**
+ * Autumn token presale — the hero's loudest CTA.
+ *
+ * The window is quoted in UTC to match the presale app, which draws the same
+ * fourteen days as a calendar (see PRESALE_START / PRESALE_DAYS in
+ * presale/app/SteadyStakeApp.tsx). It runs Aug 17–30, so the end of the sale is
+ * midnight at the top of Aug 31. Keep the two in step if the dates move.
+ */
+const PRESALE_URL = "https://presale.steadystake.org";
+const PRESALE_START = Date.UTC(2026, 7, 17);
+const PRESALE_END = Date.UTC(2026, 7, 31);
+const PRESALE_RANGE_LABEL = "Aug 17–30, 2026";
+
+type PresalePhase = "upcoming" | "live" | "ended";
+
+/**
+ * The sale's phase and its one-line status.
+ *
+ * Resolved after mount rather than during render: this page is prerendered, so
+ * a clock read at render time would bake the build's date into the HTML and be
+ * wrong for everyone who loads it later. `status` is null until the effect
+ * runs, which keeps the first client paint identical to the server's — the
+ * button still carries the date range in the meantime, so the period is never
+ * missing, only the countdown beside it.
+ */
+function usePresaleWindow(): { phase: PresalePhase; status: string | null } {
+  const [now, setNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    tick();
+    const timer = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return useMemo(() => {
+    if (now === null) return { phase: "upcoming", status: null };
+    if (now >= PRESALE_END) return { phase: "ended", status: "Sale closed" };
+    if (now >= PRESALE_START) return { phase: "live", status: "Live now" };
+
+    // Floored, like the presale app's own countdown, so both read the same day.
+    const days = Math.floor((PRESALE_START - now) / 86_400_000);
+    if (days === 0) return { phase: "upcoming", status: "Opens today" };
+    if (days === 1) return { phase: "upcoming", status: "Opens in 1 day" };
+    return { phase: "upcoming", status: `Opens in ${days} days` };
+  }, [now]);
+}
+
 /** Community rail under the hero CTAs. `live` gives the pill a pinging dot. */
 const HERO_SOCIALS = [
   {
@@ -123,6 +171,7 @@ function useCountUp(end: number, durationMs = 1800, startOn = true) {
 
 export default function HeroSection() {
   const stats = useHeroStats();
+  const presale = usePresaleWindow();
   const { isConnected } = useAccount();
   const [mounted, setMounted] = useState(false);
   const heroRef = useRef<HTMLElement | null>(null);
@@ -336,41 +385,48 @@ export default function HeroSection() {
             five networks, with your keys never leaving your hands.
           </p>
 
-          <div className="hero-animate-scale hero-delay-400 flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row lg:items-start">
-            {mounted && isConnected ? (
-              <GatedLink href="/dashboard" className="ss-btn ss-btn-primary ss-btn-lg">
-                Go to Dashboard
+          {/* Two tiers on purpose: the presale is a dated window that closes,
+              so it takes the top line on its own and the standing product CTAs
+              sit as a pair beneath it. */}
+          <div className="hero-animate-scale hero-delay-400 hero-cta">
+            <a
+              href={PRESALE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ss-btn ss-btn-presale hero-presale-cta"
+              data-phase={presale.phase}
+            >
+              <span className="hero-presale-icon" aria-hidden>
                 <svg
-                  className="h-5 w-5"
+                  viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 7l5 5m0 0l-5 5m5-5H6"
-                  />
+                  <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z" />
+                  <path d="M13 5v2M13 11v2M13 17v2" />
                 </svg>
-              </GatedLink>
-            ) : (
-              <CustomConnectButton
-                label="Start DCA - Connect wallet"
-                size="md"
-                variant="primary"
-                className="ss-btn-lg"
-              />
-            )}
+              </span>
 
-            <a
-              href="#how-it-works"
-              className="ss-btn ss-btn-secondary ss-btn-lg ss-btn-nudge-y"
-            >
-              See how it works
+              <span className="hero-presale-text">
+                <span className="hero-presale-title">Join the Token Presale</span>
+                <span className="hero-presale-meta">
+                  <span className="hero-presale-dates">{PRESALE_RANGE_LABEL}</span>
+                  {presale.status && (
+                    <span className="hero-presale-status">
+                      {presale.phase === "live" && (
+                        <span className="hero-presale-status-dot" aria-hidden />
+                      )}
+                      {presale.status}
+                    </span>
+                  )}
+                </span>
+              </span>
+
               <svg
-                className="h-4 w-4"
+                className="hero-presale-arrow"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -380,10 +436,63 @@ export default function HeroSection() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M19 14l-7 7m0 0l-7-7"
+                  d="M13 7l5 5m0 0l-5 5m5-5H6"
                 />
               </svg>
             </a>
+
+            <div className="hero-cta-row">
+              {mounted && isConnected ? (
+                <GatedLink
+                  href="/dashboard"
+                  className="ss-btn ss-btn-secondary ss-btn-lg hero-cta-wallet"
+                >
+                  Go to Dashboard
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 7l5 5m0 0l-5 5m5-5H6"
+                    />
+                  </svg>
+                </GatedLink>
+              ) : (
+                <CustomConnectButton
+                  label="Start DCA - Connect wallet"
+                  size="md"
+                  variant="secondary"
+                  className="ss-btn-lg hero-cta-wallet"
+                />
+              )}
+
+              <a
+                href="#how-it-works"
+                className="ss-btn ss-btn-ghost ss-btn-lg ss-btn-nudge-y"
+              >
+                See how it works
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 14l-7 7m0 0l-7-7"
+                  />
+                </svg>
+              </a>
+            </div>
           </div>
 
           <div className="hero-animate-scale hero-delay-500 hero-social">
