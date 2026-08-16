@@ -28,13 +28,13 @@ const HERO_CHAINS = [
  *
  * The window is quoted in UTC to match the presale app, which draws the same
  * fourteen days as a calendar (see PRESALE_START / PRESALE_DAYS in
- * presale/app/SteadyStakeApp.tsx). It runs Aug 17–30, so the end of the sale is
- * midnight at the top of Aug 31. Keep the two in step if the dates move.
+ * presale/app/SteadyStakeApp.tsx). It runs Aug 20 – Sep 2, so the end of the
+ * sale is midnight at the top of Sep 3. Keep the two in step if the dates move.
  */
 const PRESALE_URL = "https://presale.steadystake.org";
-const PRESALE_START = Date.UTC(2026, 7, 17);
-const PRESALE_END = Date.UTC(2026, 7, 31);
-const PRESALE_RANGE_LABEL = "Aug 17–30, 2026";
+const PRESALE_START = Date.UTC(2026, 7, 20);
+const PRESALE_END = Date.UTC(2026, 8, 3);
+const PRESALE_RANGE_LABEL = "Aug 20 – Sep 2, 2026";
 
 type PresalePhase = "upcoming" | "live" | "ended";
 
