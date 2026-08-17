@@ -11,6 +11,7 @@ import { Roadmap } from "./components/Roadmap";
 import { Vision } from "./components/Vision";
 import { Ecosystem } from "./components/Ecosystem";
 import { Arcade } from "./components/Arcade";
+import { EchoArenaPromo } from "./components/EchoArenaPromo";
 import { TokenLaunch } from "./components/TokenLaunch";
 import { Footer } from "./components/Footer";
 import { SectionRail } from "./components/SectionRail";
@@ -26,6 +27,7 @@ export default function Home() {
     <>
       <Header />
       <SectionRail />
+      <EchoArenaPromo />
       <main>
         <HeroSection />
         <div className="landing-pattern-bg">

@@ -17632,3 +17632,251 @@ html.ss-outage-open header {
     opacity: 0.3;
   }
 }
+
+/* ============================================================
+   Echo Arena promo
+   The game's own banner, shown in the top-right corner a beat
+   after the page settles. An aside, not a dialog: it never traps
+   focus, never blocks the page, and one click on the X puts it
+   away for the rest of the tab. The artwork is a finished 16:9
+   ad — wordmark, tagline and call to action are all in the image
+   — so the card is the image, at its native ratio, and nothing
+   else competes with it.
+
+   The size and offset are measured rather than chosen. This page
+   is ~16,000px of full-width sections, so a fixed overlay has no
+   position that stays clear once it scrolls; what holds is the
+   page at rest. A 320x180 card at right:1.5rem / top:4.5rem
+   covers nothing from 1280 to 1920 wide, in both the healthy and
+   the outage-banner layout, with ~18px of margin to the nearest
+   collision. So the box is pinned to exactly that, the component
+   stows it on scroll (see SCROLL_LIMIT_PX in EchoArenaPromo.tsx)
+   rather than letting it drift over the sections below, and
+   below 1280 it does not render at all — see the media query at
+   the end of this block.
+   ============================================================ */
+
+.eap {
+  position: fixed;
+  z-index: 45;
+  top: 4.5rem;
+  right: 1.5rem;
+  width: 20rem;
+  height: 11.25rem;
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg-2);
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+  animation: eap-in 380ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+  transition:
+    opacity 240ms ease,
+    transform 240ms ease;
+}
+
+/* The banner pushes the whole page down 2.5rem, so the card moves by the same
+   amount and keeps the clearance that was measured against the page. */
+html.ss-outage-open .eap {
+  top: 7rem;
+}
+
+/* Scrolled off the top: the page below has no room for it.
+
+   `animation: none` is load-bearing, not tidiness. The entry animation is
+   `both`-filled, so it keeps applying its final `opacity: 1` / `transform: none`
+   after it ends — and a filled animation outranks normal declarations in the
+   cascade, which means this rule is ignored until the animation is dropped. */
+.eap-stowed {
+  animation: none;
+  opacity: 0;
+  transform: translate3d(0.75rem, -0.5rem, 0) scale(0.98);
+  pointer-events: none;
+}
+
+.eap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    140deg,
+    var(--hero-accent),
+    transparent 40%,
+    transparent 62%,
+    var(--hero-primary)
+  );
+  opacity: 0.55;
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.eap-leaving {
+  animation: eap-out 260ms ease-in both;
+}
+
+@keyframes eap-in {
+  from {
+    opacity: 0;
+    transform: translate3d(1.5rem, -0.75rem, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes eap-out {
+  to {
+    opacity: 0;
+    transform: translate3d(1.25rem, -0.5rem, 0) scale(0.96);
+  }
+}
+
+.eap-close {
+  position: absolute;
+  z-index: 2;
+  top: 0.4rem;
+  right: 0.4rem;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid rgb(255 255 255 / 0.24);
+  border-radius: 999px;
+  background: rgb(6 8 20 / 0.62);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  transition:
+    background 200ms ease,
+    transform 200ms ease;
+}
+
+.eap-close svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.eap-close:hover {
+  background: rgb(6 8 20 / 0.9);
+  transform: scale(1.08);
+}
+
+.eap-link {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+/* The banner fills the card at its own ratio, so nothing is cropped away. */
+.eap-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 500ms cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+.eap-link:hover .eap-art {
+  transform: scale(1.03);
+}
+
+/* Stand-in mark and caption, used only when the artwork is missing or fails to
+   load — without the banner the card would otherwise carry no message at all. */
+.eap-mark {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--hero-secondary), var(--hero-accent));
+}
+
+.eap-mark-route {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.5);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 7;
+  animation: eap-route 9s linear infinite;
+}
+
+.eap-mark-hull {
+  fill: #fff;
+}
+
+.eap-mark-echo {
+  fill: rgb(255 255 255 / 0.42);
+}
+
+@keyframes eap-route {
+  to {
+    stroke-dashoffset: -96;
+  }
+}
+
+.eap-fallback {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.75rem 0.9rem 0.85rem;
+  background: linear-gradient(180deg, transparent, rgb(6 8 20 / 0.82) 45%);
+  color: #fff;
+}
+
+.eap-fallback strong {
+  font-family: var(--font-carter-one), var(--font-plus-jakarta), sans-serif;
+  font-size: 1.125rem;
+  line-height: 1.15;
+}
+
+.eap-fallback span {
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+
+/* Below this width the page has no room for it at all.
+
+   Measured: from 1280 to 1920 wide the card sits clear at rest, but the narrow
+   laptops and phones are solid content from edge to edge — sweeping 360x780,
+   390x844 and 414x896, not even a 140x44 pill fits anywhere on the screen
+   without landing on something. Rather than cover the hero's own call to action
+   on the smaller screens, the card stands down there; the Arcade section
+   further down the page carries Echo Arena on those widths. */
+@media (max-width: 1279px) {
+  .eap {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eap,
+  .eap-leaving {
+    animation: none;
+  }
+
+  .eap {
+    transition: opacity 240ms ease;
+  }
+
+  .eap-stowed {
+    transform: none;
+  }
+
+  .eap-art,
+  .eap-link:hover .eap-art {
+    transform: none;
+  }
+
+  .eap-mark-route {
+    animation: none;
+  }
+}
