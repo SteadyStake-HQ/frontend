@@ -120,7 +120,7 @@ export function WhyBase() {
               </p>
             </div>
             <a
-              href="https://telegram.me/+zsH_JP-eaDcxZTVh"
+              href="https://t.me/steadystake_org"
               target="_blank"
               rel="noopener noreferrer"
               className="ss-btn ss-btn-primary ss-btn-pill nw-cta-action"

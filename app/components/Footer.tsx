@@ -20,7 +20,7 @@ const SOCIAL = [
   {
     label: "Telegram",
     sub: "Join the community",
-    href: "https://telegram.me/+zsH_JP-eaDcxZTVh",
+    href: "https://t.me/steadystake_org",
     accent: "#26a5e4",
   },
 ] as const;
@@ -137,7 +137,7 @@ export function Footer() {
     logo: "https://steadystake.org/logo.png",
     sameAs: [
       "https://x.com/_steadystake",
-      "https://telegram.me/+zsH_JP-eaDcxZTVh",
+      "https://t.me/steadystake_org",
       ARENA_URL,
       ONE_PAGER,
     ],

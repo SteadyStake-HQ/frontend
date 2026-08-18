@@ -85,7 +85,7 @@ const HERO_SOCIALS = [
     key: "telegram",
     label: "Telegram",
     sub: "Join the chat",
-    href: "https://telegram.me/+zsH_JP-eaDcxZTVh",
+    href: "https://t.me/steadystake_org",
     accent: "#26a5e4",
     live: false,
   },
