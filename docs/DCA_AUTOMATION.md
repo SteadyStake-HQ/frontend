@@ -127,7 +127,7 @@ cd backend && npm run build && npm run loop
 
 ### 4. Vercel
 
-- **Cron**: Removed from `vercel.json`. Do not use Vercel Cron for DCA.
+- **Cron**: `vercel.json` schedules only `/api/cron/heartbeat` (daily), a watchdog that pokes the backend's `POST /api/run-now` in case its internal timer stopped. Vercel Cron does **not** execute DCA — the backend relayer does. Do not schedule `/api/cron/execute-dca`; it is the retired Gelato path and would double-execute.
 - **Auto-deploy**: See [VERCEL_DEPLOY.md](./VERCEL_DEPLOY.md) to enable deploys on git push.
 
 ## Security

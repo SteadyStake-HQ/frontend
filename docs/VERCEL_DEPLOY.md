@@ -13,6 +13,19 @@ To have Vercel **automatically deploy** when you push to your repo:
 
 No code changes are required; auto-deploy is controlled in the Vercel project settings.
 
-## Cron jobs (removed)
+## Cron jobs
 
-DCA execution is **no longer** triggered by Vercel Cron. The `vercel.json` crons entry has been removed. Use the **standalone backend executor** (see `backend/` and `frontend/docs/DCA_AUTOMATION.md`) to run DCA executions on a schedule (e.g. every 5 minutes) and deduct gas from users’ gas tank balances.
+DCA execution is **not** performed by Vercel Cron. The **standalone backend executor** (see `backend/` and `frontend/docs/DCA_AUTOMATION.md`) owns the schedule: it re-arms its own timer after every sweep and is the only thing that signs and submits.
+
+`vercel.json` declares one cron, a watchdog for that backend:
+
+| Path | Schedule | Purpose |
+| --- | --- | --- |
+| `/api/cron/heartbeat` | `0 10 * * *` (daily, 10:00 UTC) | Calls the backend's `POST /api/run-now`. A no-op when the backend timer is healthy; recovers the schedule if the container restarted, redeployed, or slept. |
+
+Notes:
+
+- **`CRON_SECRET` is required.** Vercel sends it as `Authorization: Bearer <CRON_SECRET>`. The heartbeat fails closed without it — an unauthenticated caller must not be able to trigger a funds-moving sweep.
+- **`SCHEDULER_API_URL` must point at the deployed backend**, or the heartbeat has nothing to call.
+- **Daily is a Hobby-plan limit.** Hobby allows one run per day; Pro allows minute-level granularity, so on Pro you can tighten the schedule to e.g. `*/5 * * * *`. No Vercel cron can match the backend's own sub-minute tick, which is why this is a watchdog and not the scheduler.
+- **Do not also schedule `/api/cron/execute-dca`.** That is the retired in-frontend Gelato executor; running it alongside the backend relayer would execute the same plan twice.
