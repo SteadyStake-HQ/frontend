@@ -858,9 +858,17 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
           if (!res.ok) {
             // Not fatal: the plan exists on-chain and a manual reindex can still recover it.
             console.error("[NewDcaModal] plan record failed:", await res.text());
+            toast.warn(
+              "Your plan was created on-chain, but could not sync with the automation server. Automatic execution may be unavailable. Contact support with your transaction hash.",
+              { autoClose: false, toastId: `plan-sync-${pendingCreateTxHash}` },
+            );
           }
         } catch (e) {
           console.error("[NewDcaModal] plan record failed:", e);
+          toast.warn(
+            "Your plan was created on-chain, but could not sync with the automation server. Automatic execution may be unavailable. Contact support with your transaction hash.",
+            { autoClose: false, toastId: `plan-sync-${pendingCreateTxHash}` },
+          );
         }
       }
 
