@@ -12,13 +12,18 @@ import {
   type ExecuteAllModalItem,
   type ExecutionStepStatus,
 } from "./ExecuteAllModal";
-import { LoadingSkeleton } from "../LoadingComponents";
 import { DCA_VAULT_ABI } from "@/config/abis";
 import { parseTxError } from "@/lib/parse-tx-error";
 import { recordPlanTxWhenMined } from "@/lib/record-plan-tx";
+import { STATE_META, STATE_ORDER, planVisualState, type PlanVisualState } from "./insights";
+
+export type PlanFilter = PlanVisualState | "all";
 
 interface DashboardPlansProps {
   onAddPlan?: () => void;
+  /** Controlled by the page, so the hero's legend chips can set it too. */
+  filter?: PlanFilter;
+  onFilterChange?: (filter: PlanFilter) => void;
 }
 
 function formatCountdownLong(secondsTotal: number): string {
@@ -110,7 +115,6 @@ const PLAN_CARD_THEMES = ["mint", "lavender", "peach", "sky"] as const;
    contract status: the plan is live on-chain, but an admin has stopped the
    backend from executing it, and that outranks readiness because no amount of
    waiting will make a held plan fire. */
-type PlanVisualState = "ready" | "active" | "ended" | "cancelled" | "held";
 
 const STATE_LABEL: Record<PlanVisualState, string> = {
   ready: "Ready",
@@ -489,8 +493,7 @@ function CreatePlanCard({ onAddPlan }: { onAddPlan?: () => void }) {
 
         <h3 className="pn-title">Start your first steady buy</h3>
         <p className="pn-body">
-          Pick an asset, a {stable} amount, and how often to buy. Every tick of the schedule swaps the
-          same amount — so the position builds itself while you get on with your day.
+          Same {stable} amount, every tick. The position builds itself.
         </p>
 
         <div className="pn-points">
@@ -554,7 +557,10 @@ function CreatePlanCard({ onAddPlan }: { onAddPlan?: () => void }) {
   );
 }
 
-export function DashboardPlans({ onAddPlan }: DashboardPlansProps) {
+export function DashboardPlans({ onAddPlan, filter: controlledFilter, onFilterChange }: DashboardPlansProps) {
+  const [localFilter, setLocalFilter] = useState<PlanFilter>("all");
+  const filter = controlledFilter ?? localFilter;
+  const setFilter = onFilterChange ?? setLocalFilter;
   const { address, isConnected } = useAccount();
   const { chainId, contracts } = useContracts();
   const { writeContract, isPending } = useWriteContract();
@@ -613,6 +619,22 @@ export function DashboardPlans({ onAddPlan }: DashboardPlansProps) {
       ),
     [plans, contractCurrentTime],
   );
+
+  /** Each plan's state against the page clock — the same reading the card itself shows. */
+  const stateCounts = useMemo(() => {
+    const counts: Record<PlanVisualState, number> = { ready: 0, active: 0, held: 0, ended: 0, cancelled: 0 };
+    for (const plan of plans) counts[planVisualState(plan, contractCurrentTime)] += 1;
+    return counts;
+  }, [plans, contractCurrentTime]);
+  const visiblePlans = useMemo(
+    () => (filter === "all" ? plans : plans.filter((plan) => planVisualState(plan, contractCurrentTime) === filter)),
+    [plans, filter, contractCurrentTime],
+  );
+  // A filter that has emptied out (its last ready plan just executed) falls back to everything,
+  // rather than leaving the user looking at an empty list they did not ask for.
+  useEffect(() => {
+    if (filter !== "all" && !isLoading && plans.length > 0 && stateCounts[filter] === 0) setFilter("all");
+  }, [filter, isLoading, plans.length, stateCounts, setFilter]);
 
   const handleExecuteSuccess = useCallback(() => {
     void refreshData();
@@ -696,12 +718,11 @@ export function DashboardPlans({ onAddPlan }: DashboardPlansProps) {
 
   return (
     <>
-      <div className="dashboard-panel dashboard-plans-panel p-4 sm:p-6">
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div id="dashboard-plans" className="dx-panel dashboard-plans-panel">
+        <div className="dx-panel-head">
           <div>
-            <p className="dashboard-section-kicker">Automation</p>
-            <h2 className="text-lg font-semibold text-[var(--foreground)]">Your DCA plans</h2>
-            <p className="mt-1 text-sm text-[var(--hero-muted)]">Review schedules, progress, and the next action for each plan.</p>
+            <p className="dx-kicker">Automation</p>
+            <h2>Your DCA plans</h2>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -745,15 +766,50 @@ export function DashboardPlans({ onAddPlan }: DashboardPlansProps) {
           </div>
         </div>
 
+        {!isLoading && plans.length > 0 && (
+          <div className="dx-filters" role="tablist" aria-label="Filter plans by state">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filter === "all"}
+              className="dx-filter"
+              onClick={() => setFilter("all")}
+            >
+              All <b>{plans.length}</b>
+            </button>
+            {STATE_ORDER.filter((state) => stateCounts[state] > 0).map((state) => (
+              <button
+                key={state}
+                type="button"
+                role="tab"
+                aria-selected={filter === state}
+                className={`dx-filter dx-filter-${state}`}
+                onClick={() => setFilter(state)}
+              >
+                <i style={{ background: STATE_META[state].color }} aria-hidden />
+                {STATE_META[state].short} <b>{stateCounts[state]}</b>
+              </button>
+            ))}
+          </div>
+        )}
+
         {isLoading ? (
-          <div className="rounded-xl border border-[var(--hero-muted)]/10 p-4">
-            <LoadingSkeleton />
+          <div className="dx-plan-skeletons" role="status" aria-label="Loading plans">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="dx-plan-skeleton" style={{ ["--i" as string]: i } as CSSProperties}>
+                <span className="dx-skel dx-skel-avatar" />
+                <span className="dx-skel-lines">
+                  <span className="dx-skel dx-skel-line" />
+                  <span className="dx-skel dx-skel-line is-short" />
+                </span>
+              </div>
+            ))}
           </div>
         ) : scheduleCount === 0 || plans.length === 0 ? (
           <CreatePlanCard onAddPlan={onAddPlan} />
         ) : (
           <div className="space-y-4">
-            {plans.map((plan, i) => (
+            {visiblePlans.map((plan, i) => (
               <SchedulePlanCard
                 key={`${chainId}-${plan.id}`}
                 plan={plan}

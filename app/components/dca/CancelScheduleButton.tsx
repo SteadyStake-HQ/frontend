@@ -101,65 +101,88 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
   }
 
   if (showConfirm) {
+    const decimals = getStableDecimals(chainId);
+    const fmt = (v: bigint) =>
+      Number(formatUnits(v, decimals)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const busy = isSubmitting || isLoading;
+    // How far along the plan is, against the halfway line past which cancelling is free.
+    const done = totalAmount > 0n ? Number((totalExecutedNum * 1000n) / totalAmount) / 10 : 0;
+    const feeShare = remainingAmount > 0n ? Number((earlyFee * 1000n) / remainingAmount) / 10 : 0;
+
     return (
-      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="bg-[var(--background)] border border-[var(--hero-muted)]/20 rounded-2xl p-6 max-w-lg w-full shadow-2xl">
-          <h3 className="text-lg font-bold mb-4 text-[var(--foreground)]">Cancel Schedule?</h3>
+      <div
+        className="dx-confirm-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`cancel-title-${scheduleId}`}
+        onClick={() => !busy && setShowConfirm(false)}
+      >
+        <div className="dx-confirm" onClick={(e) => e.stopPropagation()}>
+          <span className="dx-confirm-mark" aria-hidden>
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </span>
+          <h3 id={`cancel-title-${scheduleId}`}>Cancel plan #{scheduleId.toString()}?</h3>
 
-          {chargesEarlyFee && (
-            <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-              <p className="text-sm text-[var(--foreground)] mb-2">
-                Early cancellation fee will be charged (3% penalty):
-              </p>
-              <div className="space-y-1 text-sm">
-                <p className="text-[var(--foreground)]">
-                  Remaining: {formatUnits(remainingAmount, getStableDecimals(chainId))} {stable}
-                </p>
-                <p className="text-red-400 font-medium">
-                  Fee (3%): {formatUnits(earlyFee, getStableDecimals(chainId))} {stable}
-                </p>
-                <p className="text-green-400 font-medium">
-                  {"You'll"} receive: {formatUnits(netReturn, getStableDecimals(chainId))} {stable}
-                </p>
-              </div>
+          {/* Where the unspent funds go: back to the wallet, less any early fee. */}
+          <div className="dx-refund">
+            <div className="dx-refund-head">
+              <span>Back to wallet</span>
+              <b>
+                {fmt(chargesEarlyFee ? netReturn : remainingAmount)} <small>{stable}</small>
+              </b>
             </div>
-          )}
+            <div className="dx-refund-bar" aria-hidden>
+              <i className="is-back" style={{ flexGrow: Math.max(0.0001, 100 - feeShare) }} />
+              {chargesEarlyFee && <i className="is-fee" style={{ flexGrow: Math.max(0.0001, feeShare) }} />}
+            </div>
+            <div className="dx-refund-legend">
+              <span>
+                <i className="is-back" />
+                Refund
+              </span>
+              {chargesEarlyFee ? (
+                <span className="is-fee">
+                  <i className="is-fee" />
+                  Fee 3% · {fmt(earlyFee)}
+                </span>
+              ) : (
+                <span className="is-free">No fee</span>
+              )}
+              <span className="dx-refund-of">of {fmt(remainingAmount)} unspent</span>
+            </div>
+          </div>
 
-          {!chargesEarlyFee && (
-            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-              <p className="text-sm text-green-400 font-medium">
-                No early cancellation fee (over 50% already executed)
-              </p>
-              <p className="text-sm text-[var(--foreground)] mt-1">
-                {"You'll"} receive: {formatUnits(remainingAmount, getStableDecimals(chainId))} {stable}
-              </p>
+          {/* The fee rule, drawn: progress so far against the 50% line. */}
+          <div className="dx-feeline" title="Cancelling before half the plan has run charges 3% of what is left.">
+            <div className="dx-feeline-track" aria-hidden>
+              <i style={{ width: `${Math.min(100, done)}%` }} />
+              <b style={{ left: "50%" }} />
             </div>
-          )}
+            <div className="dx-feeline-legend">
+              <span>{Math.round(done)}% bought</span>
+              <span>fee-free from 50%</span>
+            </div>
+          </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg text-sm">
+            <p className="dx-confirm-error" role="alert">
               {error}
-            </div>
+            </p>
           )}
 
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowConfirm(false)}
-              disabled={isSubmitting || isLoading}
-              className="ss-btn ss-btn-soft ss-btn-block flex-1"
-            >
-              <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-              Keep Schedule
+          <div className="dx-confirm-actions">
+            <button onClick={() => setShowConfirm(false)} disabled={busy} className="ss-btn ss-btn-soft ss-btn-block flex-1">
+              Keep plan
             </button>
             <button
               onClick={handleCancel}
-              disabled={isSubmitting || isLoading}
-              data-loading={isSubmitting || isLoading ? "true" : undefined}
+              disabled={busy}
+              data-loading={busy ? "true" : undefined}
               className="ss-btn ss-btn-danger ss-btn-block flex-1"
             >
-              {isSubmitting || isLoading ? (
+              {busy ? (
                 <>
                   <svg className="h-4 w-4 shrink-0 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity={0.25} />
@@ -172,7 +195,7 @@ export const CancelScheduleButton = ({ scheduleId }: CancelScheduleButtonProps) 
                   <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                  Confirm
+                  Cancel &amp; refund
                 </>
               )}
             </button>

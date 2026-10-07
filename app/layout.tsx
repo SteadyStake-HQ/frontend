@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Carter_One, Plus_Jakarta_Sans } from "next/font/google";
 import { Providers } from "./providers";
 import "./globals.css";
+import "./dashboard-pro.css";
 
 const themeInitScript = `(function(){var t=localStorage.getItem("theme");var d=window.matchMedia("(prefers-color-scheme: dark)").matches;var s=t||(d?"dark":"light");document.documentElement.classList.add(s);})()`;
 

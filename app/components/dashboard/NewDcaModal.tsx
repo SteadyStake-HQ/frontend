@@ -7,6 +7,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useDCAVault, useDCAVaultRead, useTokenApproval, useTokenAllowance, useContracts, useStableSymbol, useGasTank, useGasTankAllChains, useGasTankLevel, useGasTankRefresh, useEstimatedRunCostUsdc6, useNetworkAllocation, useTokenPrices, formatTokenPrice } from "@/app/hooks";
 import type { TokenPriceItem } from "@/app/api/token-price/route";
 import { GasTankGauge, formatGasAmount } from "./GasTankVisuals";
+import { PlanPreviewChart, WalletImpactBar } from "./PlanPreviewChart";
+import { InfoTip } from "./DashboardVisuals";
 import { CHAIN_NAMES, FREQUENCY_MAP } from "@/lib/constants";
 import { useSupportedTokens } from "@/app/hooks/useSupportedTokens";
 import { DCA_VAULT_ABI, ERC20_ABI } from "@/config/abis";
@@ -31,9 +33,6 @@ const CADENCE_SECONDS: Record<number, number> = {
 
 /** Amount-per-run presets. Nothing magic — they just save four taps. */
 const QUICK_AMOUNTS = [10, 25, 50, 100];
-
-/** The receipt draws at most this many bars; past it, the count is stated instead. */
-const MAX_BARS = 14;
 
 const usd = (n: number, dp = 2) =>
   n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
@@ -1148,7 +1147,6 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
   const hasPlan = amountNum > 0 && runCountNum >= 1;
   const planTotal = amountNum * runCountNum;
   const grandTotal = gasAddedAtCreate ? planTotal + requiredGasFormatted : planTotal;
-  const remainingAfter = balanceFormatted - grandTotal;
   const shortfall = grandTotal - balanceFormatted;
   const buySymbol = selectedOption?.symbol ?? "your token";
   const chainName = chainId != null ? CHAIN_NAMES[chainId] : undefined;
@@ -1159,13 +1157,6 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
     ? formatFinish((CADENCE_SECONDS[frequency] ?? 86_400) * runCountNum)
     : "—";
 
-  // Illustrative, not live data: one bar per scheduled buy, rising as the position builds.
-  const barCount = Math.min(runCountNum, MAX_BARS);
-  const wobble = [0, 7, -5, 4, -7, 6, -3, 5, -6, 3, -4, 7, -5, 2];
-  const bars = Array.from({ length: barCount }, (_, i) => {
-    const ramp = 32 + (barCount === 1 ? 40 : (i / (barCount - 1)) * 56);
-    return Math.max(14, Math.min(100, ramp + wobble[i % wobble.length]));
-  });
   const isBusy = stage !== null || isSubmitting || isCreating || isApproving;
   /** Operator has this network out of service: existing plans keep working, new ones are refused. */
   const networkClosed = chainId != null && !allocation.acceptsNewPlans(chainId);
@@ -1591,7 +1582,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                       ))}
                     </div>
                     <p className="dm-hint">
-                      One buy every <b>{cadenceEvery}</b>, starting as soon as the plan is live.
+                      One buy every <b>{cadenceEvery}</b> · first buy at launch
                     </p>
                   </div>
 
@@ -1604,11 +1595,11 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                         </svg>
                       </span>
                       <div className="min-w-0">
-                        <p className="dm-note-title">Auto-execution is on your other plan</p>
-                        <p className="dm-note-body">
-                          Your one free auto-execution slot is in use on this network. This plan will run
-                          manually — you can execute it anytime from the dashboard.
+                        <p className="dm-note-title">
+                          Manual plan{" "}
+                          <InfoTip text="Your one free auto-execution slot on this network is in use. Execute this plan's buys from the dashboard." />
                         </p>
+                        <p className="dm-note-body">Free auto slot already in use on this network.</p>
                       </div>
                     </div>
                   ) : (
@@ -1631,12 +1622,12 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                           </span>
                           <span className="dm-auto-body">
                             {!enableAutoExec
-                              ? "Off — you'll execute each buy yourself from the dashboard."
+                              ? "Off · you execute each buy"
                               : requiredGasFormatted <= 0
-                                ? "We run every buy for you — fully hands-off."
+                                ? "Every buy runs for you"
                                 : gasAddedAtCreate
-                                  ? `We run every buy for you. ${gasUsdc(requiredGasFormatted)} of gas is prepaid with this plan.`
-                                  : `We run every buy for you. ${gasUsdc(requiredGasFormatted)} of gas comes from your existing tank.`}
+                                  ? `Hands-off · ${gasUsdc(requiredGasFormatted)} gas prepaid`
+                                  : `Hands-off · ${gasUsdc(requiredGasFormatted)} gas from tank`}
                           </span>
                         </span>
                         <span className="dm-switch" aria-hidden />
@@ -1664,27 +1655,19 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                       <span className="dm-chart-grid" aria-hidden />
 
                       {hasPlan ? (
-                        <>
-                          {runCountNum > MAX_BARS && (
-                            <span className="dm-chart-cap">showing {MAX_BARS} of {runCountNum}</span>
-                          )}
-                          <div className="dm-bars" aria-hidden>
-                            {bars.map((h, i) => (
-                              <span
-                                key={i}
-                                className="dm-bar"
-                                style={{
-                                  height: `${h}%`,
-                                  animationDelay: `${i * 55}ms`,
-                                }}
-                              />
-                            ))}
-                          </div>
-                        </>
+                        <PlanPreviewChart
+                          amount={amountNum}
+                          runs={runCountNum}
+                          cadenceSeconds={CADENCE_SECONDS[frequency] ?? 86_400}
+                          symbol={stable}
+                        />
                       ) : (
-                        <p className="dm-chart-empty">
-                          Enter an amount and a number of runs — your plan will draw itself here.
-                        </p>
+                        <div className="dm-chart-empty dx-pp-empty" aria-label="Enter an amount and a run count to preview the plan">
+                          <svg viewBox="0 0 120 48" aria-hidden>
+                            <path d="M4 44 H24 V36 H44 V28 H64 V20 H84 V12 H104 V6 H116" />
+                          </svg>
+                          <span>$ × runs</span>
+                        </div>
                       )}
                     </div>
 
@@ -1763,11 +1746,15 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                         <b>${usd(grandTotal)}</b>
                       </div>
 
-                      {hasPlan && hasEnoughBalanceForCreate && (
-                        <div className="dm-cost-row">
-                          <span>Left in wallet</span>
-                          <b>${usd(Math.max(remainingAfter, 0))}</b>
-                        </div>
+                      {/* The wallet after this plan, drawn: plan, gas and what is left on one bar,
+                          with any shortfall hanging past the balance marker. */}
+                      {hasPlan && isConnected && (
+                        <WalletImpactBar
+                          balance={balanceFormatted}
+                          plan={planTotal}
+                          gas={gasAddedAtCreate ? requiredGasFormatted : 0}
+                          symbol={stable}
+                        />
                       )}
 
                       {hasPlan && !hasEnoughBalanceForCreate && (
@@ -1775,7 +1762,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                           <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.3 3.9L2 18a2 2 0 001.7 3h16.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" />
                           </svg>
-                          ${usd(Math.max(shortfall, 0))} short of your balance.
+                          ${usd(Math.max(shortfall, 0))} short
                         </p>
                       )}
 
@@ -1814,10 +1801,23 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                             </button>
                           </div>
                           {!tankCoversPlan && (
-                            <p className="dm-gassrc-note">
-                              Your tank holds {gasUsdc(gasTankBalanceFormatted)}; this plan needs{" "}
-                              {gasUsdc(requiredGasFormatted)}. Top up to cover it.
-                            </p>
+                            <div
+                              className="dx-gas-need"
+                              title={`Your tank holds ${gasUsdc(gasTankBalanceFormatted)}; this plan needs ${gasUsdc(requiredGasFormatted)}.`}
+                            >
+                              <span className="dx-bar" aria-hidden>
+                                <span
+                                  className="dx-bar-fill"
+                                  style={{
+                                    ["--w" as string]: `${Math.min(100, (gasTankBalanceFormatted / Math.max(requiredGasFormatted, 1e-9)) * 100)}%`,
+                                    ["--dx-tone" as string]: "var(--dx-held)",
+                                  }}
+                                />
+                              </span>
+                              <span>
+                                {gasUsdc(gasTankBalanceFormatted)} / {gasUsdc(requiredGasFormatted)}
+                              </span>
+                            </div>
                           )}
                           {/*
                             Balances are pooled, so this plan will run — but the run is charged what
@@ -1827,14 +1827,19 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                             top-up is still a choice.
                           */}
                           {effectiveGasSource === "tank" && gasPaidCrossChain && gasPayingChainName && (
-                            <p className="dm-gassrc-note">
-                              Gas will be charged to your <strong>{gasPayingChainName}</strong> tank — you
-                              have no balance on this network. Balances are shared across networks, but
-                              each run costs a little more this way: the charge is the gas it burns, and
-                              debiting a {gasPayingChainName} tank means a transaction on{" "}
-                              {gasPayingChainName} too. Topping up on this network is the cheaper way
-                              to run plans here.
-                            </p>
+                            <div className="dx-route" role="note">
+                              <span className="dx-route-node">{gasPayingChainName} tank</span>
+                              <span className="dx-route-wire" aria-hidden>
+                                <i />
+                              </span>
+                              <span className="dx-route-node is-target">{chainName ?? "this plan"}</span>
+                              <span className="dx-route-tag">
+                                +cost
+                                <InfoTip
+                                  text={`No tank balance on ${chainName ?? "this network"}, so each run debits your ${gasPayingChainName} tank, a transaction on ${gasPayingChainName} at its gas price. Topping up here is cheaper.`}
+                                />
+                              </span>
+                            </div>
                           )}
                         </div>
                       )}
@@ -1876,9 +1881,14 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                                   sublabel="runs"
                                 />
                                 <p className="dm-gastank-gauge-copy">
-                                  {tankIsLow
-                                    ? "Running low — a plan that outlives the tank stops until it is topped up."
-                                    : "Runs your tank can still pay for, at the current per-run cost."}
+                                  {tankIsLow ? "Running low" : "Runs left at today's cost"}{" "}
+                                  <InfoTip
+                                    text={
+                                      tankIsLow
+                                        ? "A plan that outlives the tank stops until it is topped up."
+                                        : "Runs your tank can still pay for, at the current per-run cost."
+                                    }
+                                  />
                                 </p>
                               </div>
                               <ul className="dm-gastank-list">
@@ -1902,10 +1912,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
                                   </li>
                                 ))}
                               </ul>
-                              <p className="dm-gastank-note">
-                                Balances are held per network but spend as one — a plan can draw gas from any
-                                network&apos;s tank.
-                              </p>
+                              <p className="dm-gastank-note">held per network · spent as one</p>
                             </div>
                           </div>
                         </div>
@@ -2003,9 +2010,7 @@ export function NewDcaModal({ open, onClose }: NewDcaModalProps) {
               </div>
             )}
 
-            <p className="dm-prog-foot">
-              Your wallet may ask you to confirm more than once — that&apos;s each step above.
-            </p>
+            <p className="dm-prog-foot">One wallet prompt per step.</p>
           </div>
         </div>
       )}

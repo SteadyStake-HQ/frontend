@@ -11,7 +11,8 @@ import { DashboardRefreshButton } from "../components/dashboard/DashboardRefresh
 import { Header } from "../components/Header";
 import { RevealOnScroll } from "../components/RevealOnScroll";
 import { DashboardCharts } from "../components/dashboard/DashboardCharts";
-import { DashboardPlans } from "../components/dashboard/DashboardPlans";
+import { DashboardPlans, type PlanFilter } from "../components/dashboard/DashboardPlans";
+import { DashboardSyncStatus } from "../components/dashboard/DashboardSyncStatus";
 import { AutoPlanCapacityCard } from "../components/dashboard/AutoPlanCapacityCard";
 import { DashboardStats } from "../components/dashboard/DashboardStats";
 import { DashboardStatsProvider } from "../components/dashboard/DashboardStatsContext";
@@ -31,6 +32,14 @@ export default function DashboardPage() {
   const { chainId } = useContracts();
   const allocation = useNetworkAllocation();
   const [newDcaOpen, setNewDcaOpen] = useState(false);
+  const [planFilter, setPlanFilter] = useState<PlanFilter>("all");
+  /** A legend chip in the hero filters the list and brings it into view. */
+  const showPlans = (filter: PlanFilter) => {
+    setPlanFilter(filter);
+    requestAnimationFrame(() =>
+      document.getElementById("dashboard-plans")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  };
   const hydrated = useSyncExternalStore(
     subscribeToHydration,
     getClientHydrationSnapshot,
@@ -158,14 +167,19 @@ export default function DashboardPage() {
   return (
     <GasTankModalProvider>
       <Header />
-      <main className="landing-pattern-bg dashboard-main dashboard-surface min-h-screen overflow-hidden border-t border-[var(--hero-muted)]/10 pt-[5.5rem]">
+      <main className="landing-pattern-bg dashboard-main dashboard-surface dx-root min-h-screen overflow-hidden border-t border-[var(--hero-muted)]/10 pt-[5.5rem]">
         <div className="dashboard-orb dashboard-orb-one" aria-hidden />
         <div className="dashboard-orb dashboard-orb-two" aria-hidden />
         <div className="relative z-10 mx-auto max-w-7xl px-4 pb-14 pt-3 sm:pt-4">
           <RevealOnScroll className="dashboard-reveal">
-            <div className="dashboard-toolbar">
-              <p>Overview</p>
+            <div className="dashboard-toolbar dx-toolbar">
+              <nav className="dx-crumbs" aria-label="Breadcrumb">
+                <Link href="/">SteadyStake</Link>
+                <span aria-hidden>/</span>
+                <b>Dashboard</b>
+              </nav>
               <div className="flex flex-wrap items-center gap-2">
+                <DashboardSyncStatus />
                 <GasTankButton />
                 <DashboardRefreshButton />
                 <Link
@@ -184,7 +198,7 @@ export default function DashboardPage() {
 
           <DashboardStatsProvider>
             <RevealOnScroll className="dashboard-reveal">
-              <DashboardWelcome onAddPlan={() => setNewDcaOpen(true)} />
+              <DashboardWelcome onAddPlan={() => setNewDcaOpen(true)} onFilter={showPlans} />
             </RevealOnScroll>
             <RevealOnScroll className="dashboard-reveal dashboard-stagger">
               <DashboardStats />
@@ -194,7 +208,11 @@ export default function DashboardPage() {
             </RevealOnScroll>
           </DashboardStatsProvider>
           <RevealOnScroll className="dashboard-reveal">
-            <DashboardPlans onAddPlan={() => setNewDcaOpen(true)} />
+            <DashboardPlans
+              onAddPlan={() => setNewDcaOpen(true)}
+              filter={planFilter}
+              onFilterChange={setPlanFilter}
+            />
           </RevealOnScroll>
 
           <RevealOnScroll className="dashboard-reveal">

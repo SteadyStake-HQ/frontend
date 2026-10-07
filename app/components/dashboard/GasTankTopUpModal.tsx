@@ -41,6 +41,7 @@ import {
   gasAmountForChain,
   gasAmountFromUsdc6,
 } from "./GasTankVisuals";
+import { GasTankRunway, TopUpPreview } from "./GasTankRunway";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 
@@ -899,6 +900,9 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
               </section>
             )}
 
+            {/* ---------- When the tank runs dry, at the pace the auto plans spend it ---------- */}
+            {isConnected && <GasTankRunway runsLeft={isEmpty ? 0 : runsLeft} />}
+
             {/* ---------- Why a run costs what it costs, on the network the wallet is on ---------- */}
             <RunCostExplainer chainId={activeChainId} />
 
@@ -1036,14 +1040,13 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                     </span>
                   </div>
 
+                  {/* Runs before and after, drawn — the per-run price it is worked out at sits on the tip. */}
                   {amountWei > 0n && !overBalance && (
-                    <p className="gt-hint gt-hint-good">
-                      <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" aria-hidden>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      Buys about <b>{runsBought > 9999 ? "9,999+" : runsBought.toLocaleString("en-US")}</b> scheduled runs
-                      {" "}({formatRunCostUsd(Number(formatUnits(costPerRunUsdc6, getStableDecimals(selectedChainId))))} {stable} each).
-                    </p>
+                    <div
+                      title={`At ${formatRunCostUsd(Number(formatUnits(costPerRunUsdc6, getStableDecimals(selectedChainId))))} ${stable} per run`}
+                    >
+                      <TopUpPreview before={isEmpty ? 0 : runsLeft} added={runsBought} />
+                    </div>
                   )}
                   {overBalance && (
                     <p className="gt-hint gt-hint-warn">
@@ -1063,7 +1066,7 @@ export function GasTankTopUpModal({ open, onClose }: GasTankTopUpModalProps) {
                 ? `Switches to ${CHAIN_NAMES[selectedChainId] ?? "that network"} first.`
                 : needsApproval && amountWei > 0n
                   ? "Two signatures: approve, then deposit."
-                  : "Deducted per run, from whichever network has a balance."}
+                  : "Deducted per run · any network"}
             </p>
             <button type="button" onClick={onClose} disabled={isBusy} className="ss-btn ss-btn-soft">
               Close

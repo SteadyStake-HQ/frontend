@@ -68,6 +68,12 @@ export interface DashboardPlanRecord {
   adminControl: PlanAdminControl | null;
   /** Paused-countdown remainder still to run since the plan was resumed; null when free to run. */
   executionGate: PlanExecutionGate | null;
+  /** Seconds between buys — what the dashboard charts space a plan's past and future buys by. */
+  intervalSeconds: number;
+  /** Buys settled on-chain so far. */
+  executedCount: number;
+  /** Buys the plan was funded for, completed ones included. */
+  runsTotal: number;
 }
 
 interface DashboardHistoryPoint {
@@ -431,6 +437,9 @@ export const useDashboardStore = create<DashboardStoreState>((set, get) => ({
               status === "active" ? backendTiming?.adminControl ?? null : null,
             executionGate:
               status === "active" ? backendTiming?.executionGate ?? null : null,
+            intervalSeconds,
+            executedCount,
+            runsTotal: totalSchedules,
           };
         })
         .filter((plan): plan is DashboardPlanRecord => plan !== null)

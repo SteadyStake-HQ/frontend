@@ -35,48 +35,51 @@ export function AutoPlanCapacityCard() {
   const base = capacity.baseLimitPerNetwork;
   const baseLabel = base === null ? "Unlimited" : String(base);
 
+  const slotTip = `Your reward card adds ${capacity.nftBonus} Auto Execution Plan slot${capacity.nftBonus === 1 ? "" : "s"} shared across every network, on top of your ${baseLabel === "Unlimited" ? "unlimited" : `${baseLabel}-per-network`} base limit. Bonus slots kick in only once a network is at its base limit.`;
+
   return (
-    <section className="mt-4 rounded-2xl border border-[var(--hero-muted)]/15 bg-white/[0.02] p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span aria-hidden className="text-lg">🏆</span>
-          <h3 className="text-sm font-semibold text-[var(--hero-primary)]">
-            Reward card capacity
-          </h3>
+    <section className="dx-panel" aria-labelledby="dx-capacity-title">
+      <header className="dx-panel-head">
+        <div>
+          <p className="dx-kicker">Reward card</p>
+          <h2 id="dx-capacity-title">Auto-plan capacity</h2>
         </div>
-        <span className="rounded-full border border-[var(--hero-muted)]/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--hero-muted)]">
-          {TIER_LABEL[capacity.tier] ?? capacity.tier} plan
+        <span className="dx-state dx-state-held" style={{ ["--dx-tone" as string]: "var(--dx-c4)" }}>
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <path d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z" />
+          </svg>
+          {TIER_LABEL[capacity.tier] ?? capacity.tier}
         </span>
-      </div>
+      </header>
 
-      {/* Bonus-slot usage bar: filled = used, remainder = available. Detail on hover. */}
-      <div
-        className="mt-4"
-        title={`Your reward card adds ${capacity.nftBonus} Auto Execution Plan slot${capacity.nftBonus === 1 ? "" : "s"} shared across every network, on top of your ${baseLabel === "Unlimited" ? "unlimited" : `${baseLabel}-per-network`} base limit. Bonus slots kick in only once a network is at its base limit.`}
-      >
-        <div className="mb-1 flex items-center justify-between text-[11px] text-[var(--hero-muted)]">
-          <span>Bonus slots used</span>
-          <span>
-            <b className="text-[var(--hero-primary)]">{capacity.usedNftSlots}</b> / {capacity.nftBonus} · {capacity.availableNftSlots} free
-          </span>
+      <div className="dx-capacity">
+        {/* One tile per bonus slot: solid = in use, dashed = free. */}
+        <div title={slotTip}>
+          <div className="dx-capacity-slots" role="img" aria-label={`${capacity.usedNftSlots} of ${capacity.nftBonus} bonus slots used`}>
+            {Array.from({ length: capacity.nftBonus }).map((_, i) => (
+              <span
+                key={i}
+                className={`dx-capacity-slot${i < capacity.usedNftSlots ? " is-used" : ""}`}
+                style={{ ["--i" as string]: i }}
+              >
+                <svg viewBox="0 0 24 24" fill={i < capacity.usedNftSlots ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                  <path strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </span>
+            ))}
+          </div>
+          <p className="dx-meter-foot">
+            <span>{capacity.availableNftSlots} free</span>
+            <b>{capacity.usedNftSlots}/{capacity.nftBonus}</b>
+          </p>
+          <p className="dx-meter-foot">
+            <span>Base / network</span>
+            <b>{baseLabel}</b>
+          </p>
         </div>
-        <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-white/[0.04]">
-          {Array.from({ length: capacity.nftBonus }).map((_, i) => (
-            <span
-              key={i}
-              className={`h-full flex-1 rounded-full ${i < capacity.usedNftSlots ? "bg-[var(--hero-primary)]" : "bg-[var(--hero-muted)]/25"}`}
-            />
-          ))}
-        </div>
-        <p className="mt-1 text-[11px] text-[var(--hero-muted)]">
-          Base limit: <b className="text-[var(--hero-primary)]">{baseLabel}</b> per network · shared across all chains
-        </p>
-      </div>
 
-      {capacity.perNetwork.length > 0 && (
-        <div className="mt-4 border-t border-[var(--hero-muted)]/10 pt-3">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--hero-muted)]">Per network</p>
-          <ul className="grid gap-2 text-[12px]">
+        {capacity.perNetwork.length > 0 && (
+          <ul className="dx-capacity-nets" aria-label="Active auto plans per network">
             {capacity.perNetwork.map((n) => {
               const base = n.baseLimit ?? n.active; // unlimited base: no bar overflow
               const denom = Math.max(1, (n.baseLimit ?? n.active) + n.excess, n.active);
@@ -84,30 +87,25 @@ export function AutoPlanCapacityCard() {
               return (
                 <li
                   key={n.chainId}
+                  className="dx-capacity-net"
                   title={`${n.active} active plan${n.active === 1 ? "" : "s"} — ${basePart} within base${n.excess > 0 ? `, ${n.excess} using reward-card bonus slots` : ""}.`}
                 >
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="text-[var(--hero-muted)]">{CHAIN_NAMES[n.chainId] ?? `Chain ${n.chainId}`}</span>
-                    <span className="text-[var(--hero-primary)]">
-                      {n.active} active
-                      {n.excess > 0 && <span className="text-amber-400"> · +{n.excess} bonus</span>}
-                    </span>
-                  </div>
-                  <div className="flex h-2 gap-0.5 overflow-hidden rounded-full bg-white/[0.04]">
-                    <span
-                      className="h-full rounded-full bg-[var(--hero-primary)]"
-                      style={{ width: `${(basePart / denom) * 100}%` }}
-                    />
-                    {n.excess > 0 && (
-                      <span className="h-full rounded-full bg-amber-400" style={{ width: `${(n.excess / denom) * 100}%` }} />
-                    )}
-                  </div>
+                  <span>{CHAIN_NAMES[n.chainId] ?? `Chain ${n.chainId}`}</span>
+                  <span className="dx-split-bar" aria-hidden>
+                    <i style={{ flexGrow: basePart / denom, background: "var(--dx-active)" }} />
+                    {n.excess > 0 && <i style={{ flexGrow: n.excess / denom, background: "var(--dx-c4)" }} />}
+                    <i style={{ flexGrow: Math.max(0, 1 - (basePart + n.excess) / denom), background: "color-mix(in srgb, var(--dx-ink-3) 16%, transparent)" }} />
+                  </span>
+                  <b>
+                    {n.active}
+                    {n.excess > 0 && <span style={{ color: "var(--dx-c4)" }}> +{n.excess}</span>}
+                  </b>
                 </li>
               );
             })}
           </ul>
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }

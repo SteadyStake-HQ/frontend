@@ -23,7 +23,9 @@ import { LoadingCard } from "@/app/components/LoadingComponents";
 import { REVERSE_FREQUENCY_MAP } from "@/lib/constants";
 import { getTokenLogoUrl } from "@/lib/token-logo";
 import { useSupportedTokens } from "@/app/hooks/useSupportedTokens";
-import type { PlanAdminControl, PlanExecutionGate } from "@/app/store/useDashboardStore";
+import type { DashboardPlanRecord, PlanAdminControl, PlanExecutionGate } from "@/app/store/useDashboardStore";
+import { TrajectoryView } from "@/app/components/dashboard/DashboardCharts";
+import { InfoTip } from "@/app/components/dashboard/DashboardVisuals";
 
 type PlanStatus = "active" | "cancelled" | "ended";
 
@@ -286,9 +288,7 @@ function PlanMessage({ message }: { message: string }) {
           </svg>
         </span>
         <p>{message}</p>
-        <span>
-          Head back to the dashboard to pick a plan, or start a new one.
-        </span>
+        <span>Back to the dashboard to pick or start a plan.</span>
       </div>
     </div>
   );
@@ -606,6 +606,32 @@ export default function PlanPage() {
 
   const runsLeft = Math.max(0, plan.runsCount - plan.executedCount);
 
+  /** This plan in the shape the dashboard charts read, so the page draws it with the same chart. */
+  const trajectoryRecord: DashboardPlanRecord = {
+    id: plan.id,
+    scheduleId,
+    targetTokenAddress: String(schedule?.targetToken ?? ""),
+    targetToken: plan.token,
+    tokenLogo: logo ?? undefined,
+    amountPerInterval: plan.amountPerRun.toFixed(2),
+    frequency: plan.frequency,
+    totalDeposited: plan.totalDeposited.toFixed(2),
+    totalExecuted: plan.invested.toFixed(2),
+    nextRun: "",
+    executionProgress: plan.executionProgress,
+    status: plan.status,
+    contractDueTimestamp: plan.contractDueTimestamp,
+    nextExecutionTimestamp: plan.nextExecutionTimestamp,
+    isReady: isContractReady,
+    isEnrolledForAutoExecution,
+    executionMode: backendPlanTiming?.executionMode ?? null,
+    adminControl: hold,
+    executionGate: backendPlanTiming?.executionGate ?? null,
+    intervalSeconds: plan.intervalSeconds,
+    executedCount: plan.executedCount,
+    runsTotal: plan.runsCount,
+  };
+
   return (
     <PlanShell>
       <section className="pl-hero pl-rise" style={cssVars({ "--i": 0 })}>
@@ -752,9 +778,14 @@ export default function PlanPage() {
             </div>
 
             <p className="pl-next-note">
-              {heldCountdownSeconds != null && heldCountdownSeconds > 0
-                ? "Paused with this much of the wait to go. Nothing is counting down — if an admin resumes the plan, the next buy is this far away again."
-                : "The countdown is stopped while this plan is on hold."}
+              Clock stopped{" "}
+              <InfoTip
+                text={
+                  heldCountdownSeconds != null && heldCountdownSeconds > 0
+                    ? "Paused with this much of the wait to go. If an admin resumes the plan, the next buy is this far away again."
+                    : "The countdown is stopped while this plan is on hold."
+                }
+              />
             </p>
           </div>
         )}
@@ -818,13 +849,22 @@ export default function PlanPage() {
                 disabled={!isContractReady}
                 executionMode={backendPlanTiming?.executionMode ?? null}
               />
-              <span className="pl-actions-note">
+              <span
+                className="pl-actions-note"
+                title={
+                  isEnrolledForAutoExecution
+                    ? "This plan runs automatically when its on-chain countdown reaches zero."
+                    : "Runs when you execute it, or enrol it for auto-execution."
+                }
+              >
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
+                  {isEnrolledForAutoExecution ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5v14l11-7L8 5z" />
+                  )}
                 </svg>
-                {isEnrolledForAutoExecution
-                  ? "This plan runs automatically when its on-chain countdown reaches zero."
-                  : "Runs when you execute it, or enrol it for auto-execution."}
+                {isEnrolledForAutoExecution ? "Auto-runs at zero" : "Manual · you execute"}
               </span>
               <CancelScheduleButton scheduleId={scheduleId} />
             </>
@@ -867,6 +907,21 @@ export default function PlanPage() {
         </div>
       </div>
 
+      <section className="pl-panel pl-rise dx-root" style={cssVars({ "--i": 2 })}>
+        <div className="pl-panel-head">
+          <div>
+            <h2>Buys over time</h2>
+            <p>
+              {plan.executedCount} of {plan.runsCount} settled
+              {plan.status === "active" && !hold ? ` · ${runsLeft} scheduled` : ""}
+            </p>
+          </div>
+        </div>
+        <div className="pl-panel-body">
+          <TrajectoryView plans={[trajectoryRecord]} now={chainNow - (chainNow % 30)} />
+        </div>
+      </section>
+
       <PlanPriceBoard
         token={plan.token}
         currentUsd={currentPriceUsd}
@@ -875,7 +930,7 @@ export default function PlanPage() {
         executedCount={plan.executedCount}
       />
 
-      <section className="pl-panel pl-rise" style={cssVars({ "--i": 3 })}>
+      <section className="pl-panel pl-rise" style={cssVars({ "--i": 4 })}>
         <div className="pl-panel-head">
           <div>
             <h2>Execution history</h2>
@@ -991,18 +1046,16 @@ function PlanPriceBoard({
   const lastLabel = formatTokenPrice(lastUsd);
 
   return (
-    <section className="pl-panel pl-prices-panel pl-rise" style={cssVars({ "--i": 2 })}>
+    <section className="pl-panel pl-prices-panel pl-rise" style={cssVars({ "--i": 3 })}>
       <div className="pl-panel-head">
         <div>
           <h2>{token} price</h2>
           <p>
             {storeUnreadable
-              ? "Live price now. Recorded buy prices are unavailable while the plan store can't be reached."
+              ? "Live now · buy prices unavailable"
               : pricedCount === 0
-                ? "Live price now. Prices are recorded from the next buy onwards."
-                : `Live price now, against the ${pricedCount === 1 ? "price" : "prices"} recorded at ${
-                    pricedCount === 1 ? "this plan's buy" : `this plan's ${pricedCount} buys`
-                  }.`}
+                ? "Live now · recorded from the next buy"
+                : `Live now vs ${pricedCount} recorded ${pricedCount === 1 ? "buy" : "buys"}`}
           </p>
         </div>
       </div>
@@ -1057,18 +1110,91 @@ function PlanPriceBoard({
           </div>
         </dl>
 
+        <PriceScale
+          points={[
+            { key: "start", label: "Start", usd: startUsd },
+            { key: "avg", label: "Your avg", usd: avgUsd },
+            { key: "last", label: "Last buy", usd: lastUsd },
+            { key: "now", label: "Now", usd: currentUsd },
+          ]}
+        />
+
         {/* A plan can have more buys than prices: recording started partway through its life, or a
             run happened while every feed was down. Say so — an average over 3 of 10 buys is a
-            different claim from an average over all of them. */}
+            different claim from an average over all of them. Drawn as coverage; the why is on the tip. */}
         {!storeUnreadable && executedCount > 0 && pricedCount < executedCount && (
-          <p className="pl-note">
-            {pricedCount === 0
-              ? `None of this plan's ${executedCount} buys carry a recorded price — they ran before prices were recorded, or while no feed could quote ${token}.`
-              : `${pricedCount} of ${executedCount} buys carry a recorded price, so the average above covers those buys only.`}
-          </p>
+          <div className="dx-coverage">
+            <span className="dx-coverage-label">
+              Priced buys
+              <InfoTip
+                text={
+                  pricedCount === 0
+                    ? `None of this plan's ${executedCount} buys carry a recorded price: they ran before prices were recorded, or while no feed could quote ${token}.`
+                    : `${pricedCount} of ${executedCount} buys carry a recorded price, so the average covers those buys only.`
+                }
+              />
+            </span>
+            <span className="dx-coverage-cells" aria-hidden>
+              {Array.from({ length: Math.min(executedCount, 40) }).map((_, i) => (
+                <i key={i} className={i < Math.round((pricedCount / executedCount) * Math.min(executedCount, 40)) ? "is-on" : ""} />
+              ))}
+            </span>
+            <b>
+              {pricedCount}/{executedCount}
+            </b>
+          </div>
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * Start, average, last and now on one price line. Which side of your average the price sits on is
+ * the question a DCA owner is asking, and position answers it faster than four numbers do.
+ */
+function PriceScale({ points }: { points: Array<{ key: string; label: string; usd: number | null }> }) {
+  const known = points.filter((p): p is { key: string; label: string; usd: number } => p.usd != null && p.usd > 0);
+  if (known.length < 2) return null;
+  const values = known.map((p) => p.usd);
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const pad = (hi - lo || hi * 0.1) * 0.12;
+  const min = lo - pad;
+  const max = hi + pad;
+  const pos = (v: number) => ((v - min) / (max - min)) * 100;
+  const avg = known.find((p) => p.key === "avg");
+  const now = known.find((p) => p.key === "now");
+  // Above the average, the position is up on what it was bought for; below, the plan is buying cheap.
+  const zone = avg && now ? (now.usd >= avg.usd ? "is-up" : "is-down") : "";
+
+  return (
+    <div className={`dx-pscale ${zone}`} role="img" aria-label={known.map((p) => `${p.label} ${formatTokenPrice(p.usd)}`).join(", ")}>
+      <div className="dx-pscale-track">
+        {avg && now && (
+          <span
+            className="dx-pscale-zone"
+            style={{ left: `${Math.min(pos(avg.usd), pos(now.usd))}%`, width: `${Math.abs(pos(now.usd) - pos(avg.usd))}%` }}
+          />
+        )}
+        {known.map((p, i) => (
+          <span
+            key={p.key}
+            className={`dx-pscale-pt is-${p.key}${i % 2 ? " is-below" : ""}`}
+            style={{ left: `${pos(p.usd)}%` }}
+            data-tip={`${p.label}: ${formatTokenPrice(p.usd)}`}
+            tabIndex={0}
+          >
+            <i />
+            <em>{p.label}</em>
+          </span>
+        ))}
+      </div>
+      <div className="dx-pscale-axis" aria-hidden>
+        <span>{formatTokenPrice(lo)}</span>
+        <span>{formatTokenPrice(hi)}</span>
+      </div>
+    </div>
   );
 }
 
@@ -1112,7 +1238,7 @@ function PlanHistory({
           </svg>
         </span>
         <p>No buys were executed</p>
-        <span>This plan closed before its first scheduled run.</span>
+        <span>Closed before its first run.</span>
       </div>
     );
   }
@@ -1126,7 +1252,7 @@ function PlanHistory({
           </svg>
         </span>
         <p>Reading the chain…</p>
-        <span>Pulling this plan&apos;s swap events from the block explorer&apos;s node.</span>
+        <span>Fetching swap events</span>
       </div>
     );
   }
@@ -1240,11 +1366,16 @@ function PlanHistory({
 
       {plan.executedCount > 0 && incomplete && (
         <p className="pl-note">
-          {unavailable
-            ? "This network's RPC won't serve historical logs, so the times above are derived from the schedule and transaction links aren't available."
-            : partial
-              ? `Only the most recent ${logged.length} of ${plan.executedCount} buys could be read back from this RPC — earlier rows show times derived from the schedule.`
-              : "Some swap events couldn't be found on the connected RPC — those rows show times derived from the schedule."}
+          {unavailable ? "Times derived from schedule" : partial ? `${logged.length} of ${plan.executedCount} buys read on-chain` : "Some times derived from schedule"}{" "}
+          <InfoTip
+            text={
+              unavailable
+                ? "This network's RPC won't serve historical logs, so times are derived from the schedule and transaction links aren't available."
+                : partial
+                  ? `Only the most recent ${logged.length} of ${plan.executedCount} buys could be read back from this RPC; earlier rows show times derived from the schedule.`
+                  : "Some swap events couldn't be found on the connected RPC; those rows show times derived from the schedule."
+            }
+          />
         </p>
       )}
     </>

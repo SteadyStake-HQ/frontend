@@ -1,164 +1,235 @@
 "use client";
 
-import { useState, useEffect, type ReactNode } from "react";
+import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { useDashboardStats } from "./DashboardStatsContext";
 import { useStableSymbol } from "@/app/hooks/useContracts";
-import { Card3D } from "../Card3D";
+import { useDashboardStore } from "@/app/store/useDashboardStore";
+import { RadialProgress, RollingNumber, TokenAvatar, useChainNow } from "./DashboardVisuals";
+import { STATE_META, countdownParts, fullTime, planVisualState, summarize, usd } from "./insights";
 
-/** Compact skeleton for stat number (single line) */
+/** Compact skeleton for a stat number (single line). */
 export function StatValueSkeleton() {
+  return <span className="dx-skel dx-skel-value" aria-hidden />;
+}
+
+function Tile({
+  label,
+  icon,
+  tone,
+  hint,
+  children,
+  visual,
+  index,
+}: {
+  label: string;
+  icon: ReactNode;
+  tone: string;
+  hint?: string;
+  children: ReactNode;
+  visual?: ReactNode;
+  index: number;
+}) {
   return (
-    <div
-      className="stat-card-skeleton h-8 w-24 animate-pulse rounded md:h-9"
-      aria-hidden
-    />
+    <article
+      className="dx-tile"
+      style={{ ["--dx-tone" as string]: tone, ["--i" as string]: index } as CSSProperties}
+      title={hint}
+    >
+      <span className="dx-tile-glow" aria-hidden />
+      <header className="dx-tile-head">
+        <span className="dx-tile-icon" aria-hidden>{icon}</span>
+        <span className="dx-tile-label">{label}</span>
+      </header>
+      <div className="dx-tile-body">{children}</div>
+      {visual && <div className="dx-tile-visual">{visual}</div>}
+    </article>
   );
 }
 
-/** Format seconds remaining into countdown string: 2d 5h 12m 33s */
-function formatCountdown(secondsTotal: number): string {
-  if (secondsTotal <= 0) return "Now";
-  const d = Math.floor(secondsTotal / 86400);
-  const h = Math.floor((secondsTotal % 86400) / 3600);
-  const m = Math.floor((secondsTotal % 3600) / 60);
-  const s = secondsTotal % 60;
-  const parts: string[] = [];
-  if (d > 0) parts.push(`${d}d`);
-  if (h > 0) parts.push(`${h}h`);
-  parts.push(`${m}m`);
-  parts.push(`${s}s`);
-  return parts.join(" ");
-}
-
-function NextDCACountdown({
-  targetTimestamp,
-  clockOffsetSeconds,
-}: {
-  targetTimestamp: number | null;
-  clockOffsetSeconds: number;
-}) {
-  const [display, setDisplay] = useState<string>("—");
-
-  useEffect(() => {
-    if (targetTimestamp == null) {
-      queueMicrotask(() => setDisplay("—"));
-      return;
-    }
-    const tick = () => {
-      const now = Math.floor(Date.now() / 1000) + clockOffsetSeconds;
-      const remaining = Math.max(0, targetTimestamp - now);
-      setDisplay(formatCountdown(remaining));
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [targetTimestamp, clockOffsetSeconds]);
-
-  return <span>{display}</span>;
-}
+const money = (n: number) => usd(n);
 
 export function DashboardStats() {
-  const {
-    usdcBalance,
-    isLoadingBalance,
-    totalDeposited,
-    nextExecutionTime,
-    backendChainClockOffsetSeconds,
-    activePlanCount,
-    isLoadingStats,
-  } = useDashboardStats();
+  const { usdcBalance, isLoadingStats } = useDashboardStats();
   const stable = useStableSymbol();
+  const plans = useDashboardStore((s) => s.plans);
+  const now = useChainNow();
+  const summary = useMemo(() => summarize(plans, now), [plans, now]);
+  const wallet = Number(String(usdcBalance).replace(/,/g, "")) || 0;
+  const inPlans = summary.remaining;
+  const walletShare = wallet + inPlans > 0 ? wallet / (wallet + inPlans) : 0;
+  const deployed = summary.committed > 0 ? summary.executed / summary.committed : 0;
 
-  const stats = [
-    {
-      label: "Ready to invest",
-      value: isLoadingBalance ? null : `${usdcBalance} ${stable}`,
-      sub: "Available in your wallet",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M4 7.5h15a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2v-12a2 2 0 012-2h12" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M16 12h5v4h-5a2 2 0 010-4z" />
-        </svg>
-      ) as ReactNode,
-      theme: "mint" as const,
-    },
-    {
-      label: "Plan funding",
-      value: isLoadingStats ? null : totalDeposited > 0 ? `$${totalDeposited.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—",
-      sub: `${stable} committed across plans`,
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M4 18V9m5 9V5m6 13v-7m5 7V3" />
-        </svg>
-      ) as ReactNode,
-      theme: "lavender" as const,
-    },
-    {
-      label: "Active plans",
-      value: isLoadingStats ? null : activePlanCount.toString(),
-      sub: "Recurring schedules running",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <rect x="4" y="5" width="16" height="15" rx="3" strokeWidth="1.8" />
-          <path strokeLinecap="round" strokeWidth="1.8" d="M8 3v4m8-4v4M4 10h16m-11 4h6" />
-        </svg>
-      ) as ReactNode,
-      theme: "peach" as const,
-    },
-    {
-      label: "Next DCA in",
-      sub: "Until the next scheduled buy",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <circle cx="12" cy="13" r="8" strokeWidth="1.8" />
-          <path strokeLinecap="round" strokeWidth="1.8" d="M12 9v4l2.5 1.5M9 3h6" />
-        </svg>
-      ) as ReactNode,
-      theme: "sky" as const,
-      isCountdown: true as const,
-    },
-  ];
+  const next = summary.nextBuy;
+  const nextPlan = next?.plan;
+  const secondsLeft = next ? Math.max(0, next.at - now) : 0;
+  const elapsed = nextPlan && nextPlan.intervalSeconds > 0 ? 1 - secondsLeft / nextPlan.intervalSeconds : 0;
+  const isNow = next != null && secondsLeft === 0;
+
+  /** One dot per plan, coloured by state — the plan list in miniature. */
+  const dots = useMemo(
+    () => plans.slice(0, 30).map((p) => ({ id: p.id, state: planVisualState(p, now), token: p.targetToken })),
+    [plans, now],
+  );
 
   return (
-    <section className="dashboard-metrics mb-8" aria-labelledby="dashboard-metrics-title">
-      <div className="dashboard-section-heading">
-        <div>
-          <p className="dashboard-section-kicker">At a glance</p>
-          <h2 id="dashboard-metrics-title">Your DCA health</h2>
-        </div>
-        <p>Live wallet and on-chain plan data</p>
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {stats.map((stat) => (
-        <Card3D key={stat.label} className="dashboard-stagger-item">
-          <div className={`landing-card-sweet landing-card-${stat.theme} h-full p-5`}>
-            <div className="mb-2 flex items-center gap-2.5">
-              <span className="stat-card-tile" aria-hidden>{stat.icon}</span>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--hero-muted)]">
-                {stat.label}
+    <section className="dx-tiles" aria-label="Key figures">
+      <Tile
+        index={0}
+        label="Wallet"
+        tone="var(--dx-c1)"
+        hint={`${stable} in your wallet, ready to fund a plan`}
+        icon={
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 7.5h15a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2v-12a2 2 0 012-2h12" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16 12h5v4h-5a2 2 0 010-4z" />
+          </svg>
+        }
+        visual={
+          isLoadingStats ? null : (
+            <div className="dx-split" title={`${usd(wallet)} in wallet · ${usd(inPlans)} waiting in plans`}>
+              <span className="dx-split-bar" aria-hidden>
+                <i style={{ flexGrow: Math.max(walletShare, 0.0001) }} className="is-a" />
+                <i style={{ flexGrow: Math.max(1 - walletShare, 0.0001) }} className="is-b" />
+              </span>
+              <span className="dx-split-legend">
+                <span><i className="is-a" />wallet</span>
+                <span><i className="is-b" />in plans {usd(inPlans, 0)}</span>
+              </span>
+            </div>
+          )
+        }
+      >
+        {isLoadingStats ? (
+          <StatValueSkeleton />
+        ) : (
+          <p className="dx-tile-value">
+            <RollingNumber value={wallet} format={money} />
+            <small>{stable}</small>
+          </p>
+        )}
+      </Tile>
+
+      <Tile
+        index={1}
+        label="Deployed"
+        tone="var(--dx-c3)"
+        hint={`${usd(summary.executed)} swapped of ${usd(summary.committed)} committed`}
+        icon={
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 18V9m5 9V5m6 13v-7m5 7V3" />
+          </svg>
+        }
+        visual={
+          isLoadingStats ? null : (
+            <div className="dx-meter">
+              <span className="dx-bar dx-bar-ticks" aria-hidden style={{ ["--ticks" as string]: Math.min(24, Math.max(1, summary.buysTotal)) } as CSSProperties}>
+                <span className="dx-bar-fill" style={{ ["--w" as string]: `${deployed * 100}%` } as CSSProperties} />
+              </span>
+              <span className="dx-meter-foot">
+                <span>{summary.buysDone}/{summary.buysTotal} buys</span>
+                <b>{Math.round(deployed * 100)}%</b>
+              </span>
+            </div>
+          )
+        }
+      >
+        {isLoadingStats ? (
+          <StatValueSkeleton />
+        ) : (
+          <p className="dx-tile-value">
+            <RollingNumber value={summary.executed} format={money} />
+            <small>of {usd(summary.committed, 0)}</small>
+          </p>
+        )}
+      </Tile>
+
+      <Tile
+        index={2}
+        label="Plans"
+        tone="var(--dx-c7)"
+        hint="Each dot is a plan, coloured by its state"
+        icon={
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <rect x="4" y="5" width="16" height="15" rx="3" />
+            <path strokeLinecap="round" d="M8 3v4m8-4v4M4 10h16m-11 4h6" />
+          </svg>
+        }
+        visual={
+          isLoadingStats ? null : dots.length === 0 ? (
+            <span className="dx-dots dx-dots-empty" aria-hidden>
+              {Array.from({ length: 8 }).map((_, i) => <i key={i} />)}
+            </span>
+          ) : (
+            <span className="dx-dots" role="list">
+              {dots.map((d, i) => (
+                <i
+                  key={d.id}
+                  role="listitem"
+                  className={`dx-dot-${d.state}`}
+                  style={{ background: STATE_META[d.state].color, ["--i" as string]: i } as CSSProperties}
+                  title={`#${d.id} ${d.token} — ${STATE_META[d.state].label}`}
+                />
+              ))}
+            </span>
+          )
+        }
+      >
+        {isLoadingStats ? (
+          <StatValueSkeleton />
+        ) : (
+          <p className="dx-tile-value">
+            <RollingNumber value={summary.live} format={(n) => String(Math.round(n))} />
+            <small>live · {summary.total} total</small>
+          </p>
+        )}
+      </Tile>
+
+      <Tile
+        index={3}
+        label="Next buy"
+        tone={isNow ? "var(--dx-ready)" : "var(--dx-active)"}
+        hint={next ? `${nextPlan?.targetToken} · ${fullTime(next.at)}` : "No buy is scheduled"}
+        icon={
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <circle cx="12" cy="13" r="8" />
+            <path strokeLinecap="round" d="M12 9v4l2.5 1.5M9 3h6" />
+          </svg>
+        }
+        visual={
+          isLoadingStats || !nextPlan ? null : (
+            <span className="dx-next-token">
+              <TokenAvatar logo={nextPlan.tokenLogo} symbol={nextPlan.targetToken} size={20} />
+              ${nextPlan.amountPerInterval} → {nextPlan.targetToken}
+            </span>
+          )
+        }
+      >
+        {isLoadingStats ? (
+          <StatValueSkeleton />
+        ) : !next ? (
+          <p className="dx-tile-value dx-tile-muted">—<small>nothing scheduled</small></p>
+        ) : (
+          <div className="dx-next">
+            <RadialProgress fraction={isNow ? 1 : elapsed} size={46} tone={isNow ? "var(--dx-ready)" : "var(--dx-active)"}>
+              {isNow ? (
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M8 5v14l11-7L8 5z" /></svg>
+              ) : null}
+            </RadialProgress>
+            {isNow ? (
+              <p className="dx-tile-value dx-now">Now</p>
+            ) : (
+              <p className="dx-countdown" aria-live="off">
+                {countdownParts(secondsLeft).map((p) => (
+                  <span key={p.u}>
+                    {p.v}
+                    <small>{p.u}</small>
+                  </span>
+                ))}
               </p>
-            </div>
-            <div className="stat-card-value mt-1 text-xl font-bold tabular-nums md:text-2xl flex items-center min-h-[2rem] md:min-h-[2.25rem]">
-              {stat.isCountdown ? (
-                isLoadingStats ? (
-                  <StatValueSkeleton />
-                ) : (
-                  <NextDCACountdown
-                    targetTimestamp={nextExecutionTime}
-                    clockOffsetSeconds={backendChainClockOffsetSeconds}
-                  />
-                )
-              ) : stat.value === null ? (
-                <StatValueSkeleton />
-              ) : (
-                stat.value
-              )}
-            </div>
-            <p className="mt-1.5 text-xs font-medium text-[var(--hero-muted)]">{stat.sub}</p>
+            )}
           </div>
-        </Card3D>
-      ))}
-      </div>
+        )}
+      </Tile>
     </section>
   );
 }
